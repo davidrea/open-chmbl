@@ -23,17 +23,22 @@ criterion so we know when to move on.
 
 ## Phase 2 — CAN capture on the reference bike (Triumph Speed 400)
 
-- **First: determine whether the diagnostic port broadcasts free-running CAN or only
-  responds to requests** — this gates the whole listen-only approach (see
+Two rigs (see [can-profiles.md §3](can-profiles.md#3-sniffing-methodology)):
+**Rig A** = PCAN-USB + PCAN-Explorer on a stand; **Rig B** = Raspberry Pi / Pi Zero
+ride-logger (SocketCAN, listen-only) for in-motion signals.
+
+- **First (Rig A): determine whether the diagnostic port broadcasts free-running CAN
+  or only responds to requests** — this gates the whole listen-only approach (see
   [can-profiles.md §5](can-profiles.md#5-reference-target--triumph-speed-400-tr-series-platform)).
-- Confirm the red 6-pin connector pinout + bus bit rate by probing; capture raw
-  frames (listen-only).
-- Reverse-engineer `brake_switch`, `throttle_pct`, `rpm`, and `clutch_pulled` (the
-  400 single may not expose a clutch switch).
-- Fill in the `bike_profile_t`; **validate the same profile on the Scrambler 400 X**
-  (shared powertrain). Commit anonymized capture logs.
-- **Exit:** offline replay of a capture recovers all available signals; one profile
-  works on both 400s.
+- Confirm the red 6-pin connector pinout + bus bit rate by probing.
+- Rig A: reverse-engineer `brake_switch`, `throttle_pct`, `rpm`, and `clutch_pulled`
+  (the 400 single may not expose a clutch switch). Build a `.dbc`/`.sym`.
+- Rig B: log full rides to capture **wheel speed**; correlate speed ↔ RPM ↔ throttle
+  ↔ clutch to derive gears and **true road deceleration** for `DECEL` calibration.
+- Export the `bike_profile_t` from the `.dbc`; **validate the same profile on the
+  Scrambler 400 X** (shared powertrain). Commit anonymized `.trc` / `candump` logs.
+- **Exit:** offline replay recovers all available signals; one profile works on both
+  400s; a labelled ride log exists for threshold tuning.
 
 ## Phase 3 — End-to-end on the bench
 
@@ -67,6 +72,8 @@ criterion so we know when to move on.
 | Reference bike | Which exact make/model/year? | **Triumph Speed 400** (+ Scrambler 400 X, shared powertrain); Street Triple 765 as a stretch. |
 | CAN access mode | Free-running broadcast vs. request/response on the diag port? | **Unknown — Phase 2 gate.** Determines whether listen-only sniffing works at all. |
 | Street Triple support | Same profile or separate? | Separate profile (different platform), but same connector/TX hardware. |
+| Wheel speed in DECEL | Use bike wheel-speed for live deceleration, or calibration only? | Calibration ground truth first; revisit feeding it live once captured (stays clear of the inertial-sensing patent — it's CAN data, not an IMU). |
+| Reverse-engineering tools | Bench + ride logging stack? | **Rig A:** PCAN-USB + PCAN-Explorer (listen-only). **Rig B:** Pi/Pi Zero + SocketCAN `candump`/`python-can`; analysis with `cantools`. |
 | LED array | Addressable (WS2812) vs. discrete high-power red + CC driver? | Discrete red — simpler legal-color/no-flash story, more efficient. |
 | Shared code | Real `shared/` lib vs. duplicated headers across `transmitter/software` and `brake_light/software`? | Start duplicated/symlinked; promote to a lib (or PlatformIO `lib_deps`) once it stabilizes. |
 | Framework | ESP-IDF vs. Arduino-ESP32? | ESP-IDF for TWAI + ESP-NOW + deep-sleep control. |
