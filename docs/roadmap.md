@@ -1,0 +1,77 @@
+# Roadmap & open questions
+
+Phased plan from "empty repo" to "works on a real bike." Each phase has a clear exit
+criterion so we know when to move on.
+
+---
+
+## Phase 0 — Architecture (this pass)
+
+- ✅ System architecture, docs, repo skeleton.
+- **Exit:** agreed design + directory structure (`transmitter/` and `brake_light/`,
+  each with `hardware/` + `software/`).
+
+## Phase 1 — Bench bring-up (no bike)
+
+- ESP-NOW link between two dev boards: pre-pairing, encrypted peer, heartbeat at
+  20–50 Hz, link-loss failsafe on the RX.
+- RX drives a placeholder LED bar from a faked `brake_state_t` stream.
+- Host-side unit tests for the **state machine** and **profile decoder** (pure
+  functions, no hardware).
+- **Exit:** wave a fake state over the air → correct LED behavior + correct link-loss
+  indication.
+
+## Phase 2 — CAN capture on the reference bike
+
+- Choose the reference bike (whoever owns one — see
+  [can-profiles.md §5](can-profiles.md#5-reference-target)).
+- Confirm diagnostic connector pinout, bit rate; capture raw frames (listen-only).
+- Reverse-engineer `brake_switch`, `throttle_pct`, `rpm`, `clutch_pulled`.
+- Fill in the `bike_profile_t` and commit anonymized capture logs.
+- **Exit:** offline replay of a capture recovers all four signals correctly.
+
+## Phase 3 — End-to-end on the bench
+
+- Transmitter decodes live CAN (bike on a stand) → state machine → ESP-NOW → helmet
+  LED.
+- Calibrate the state-machine tunables (debounce, RPM-fall threshold, dwell times).
+- Verify `BRAKE` latency ≤ 100 ms; verify no strobing; verify `DECEL` gating by
+  clutch.
+- **Exit:** squeeze the brake → bright steady light within budget; roll off throttle
+  → `DECEL` (when enabled); shift → no flicker.
+
+## Phase 4 — Hardware integration
+
+- Real boards: transmitter (protected 12 V power, listen-only CAN, sleep) and
+  brake_light (LiPo, USB-C charge, auto-dim, breakaway mount, IP65 enclosure).
+- Parasitic-draw and runtime measurements vs. targets.
+- **Exit:** a wearable unit + a plug-in unit that run a full ride on the bench/stand.
+
+## Phase 5 — Field, polish, generalize
+
+- Controlled real-world testing (where legal).
+- Add more bike profiles; consider runtime profile selection.
+- Documentation for builders, BOM finalization, enclosure/mount files.
+
+---
+
+## Open questions / decisions to revisit
+
+| Topic | Question | Current lean |
+|-------|----------|--------------|
+| Reference bike | Which exact make/model/year? | Whatever the first contributor owns (Euro 5, CAN on diag port). |
+| LED array | Addressable (WS2812) vs. discrete high-power red + CC driver? | Discrete red — simpler legal-color/no-flash story, more efficient. |
+| Shared code | Real `shared/` lib vs. duplicated headers across `transmitter/software` and `brake_light/software`? | Start duplicated/symlinked; promote to a lib (or PlatformIO `lib_deps`) once it stabilizes. |
+| Framework | ESP-IDF vs. Arduino-ESP32? | ESP-IDF for TWAI + ESP-NOW + deep-sleep control. |
+| `DECEL` feature | Ship the engine-braking courtesy cue at all? | Implement, **off by default** for legal reasons. |
+| Charge IC | MCP73871 (load-share) vs. TP4056? | MCP73871 so the light works while charging. |
+| Battery monitor | Fuel-gauge IC vs. ADC divider? | TBD on cost/space. |
+| Telemetry | RX→TX battery/RSSI reporting? | Optional, diagnostics only; not core. |
+
+---
+
+## Tracking
+
+As code lands, each unit's `hardware/` and `software/` directory gets its own README
+documenting parts, pinout, and build/flash instructions. This roadmap is the
+single source of truth for "what's next."
