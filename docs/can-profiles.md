@@ -63,7 +63,7 @@ typedef struct {
 } can_signal_t;
 
 typedef struct {
-    const char  *name;          // e.g. "Yamaha MT-09 2021 (Euro5)"
+    const char  *name;          // e.g. "Triumph Speed 400 / Scrambler 400X (TR-series)"
     uint32_t     bitrate;       // 250000 / 500000
     can_signal_t brake_switch;  // expect 1-bit
     can_signal_t throttle_pct;  // 0..100 %
@@ -78,25 +78,63 @@ machine disables/contracts `DECEL` (see [firmware.md](firmware.md)).
 
 ---
 
-## 5. Reference target
+## 5. Reference target — Triumph Speed 400 (TR-series platform)
 
-> **TODO — fill in once the first contributor's bike is on the bench.**
+**Primary target: Triumph Speed 400.** Its sibling, the **Scrambler 400 X**, shares
+the same **TR-series 398 cc single** powertrain and ECU, so a single profile is
+expected to cover both — capture one, validate on the other.
 
-| Field | Value |
-|-------|-------|
-| Bike (make/model/year) | _TBD — whatever the first builder owns_ |
-| Diagnostic connector | _TBD (pinout verified? Y/N)_ |
-| CAN bit rate | _TBD_ |
-| `brake_switch` (ID / bits / scale) | _TBD_ |
-| `throttle_pct` | _TBD_ |
-| `rpm` | _TBD_ |
-| `clutch_pulled` | _TBD or "not exposed"_ |
-| Raw capture log | _link to `transmitter/software/captures/…`_ |
+**Bonus/stretch target: Triumph Street Triple 765.** This is a *different platform*
+(765 cc inline-triple, Moto2-derived, higher-spec electronics) with its own ECU, so
+it needs its **own profile** — but it uses the same family of diagnostic connector,
+so the TX *hardware* should carry straight over.
 
-Recommended first target: a Euro 5 (post-2020) bike the contributor owns, that
-exposes CAN on the diagnostic port and has an active reverse-engineering community.
-Pick by **physical access**, not popularity — you need to spin the wheel and squeeze
-the brake repeatedly.
+### Diagnostic connector (verified from owner sources)
+
+| Property | Value | Confidence |
+|----------|-------|-----------|
+| Connector | **Red 6-pin** OBD2 (Euro 5), under the seat next to the fuse box | High |
+| Adapter | Needs a **6-pin → 16-pin** Triumph/aftermarket adapter for off-the-shelf tools | High |
+| Signals present | **CAN-H / CAN-L** (ISO 11898 / J-2284) **plus** a K-line (legacy ISO 9141) | High |
+| Bit rate | Likely 500 kbit/s — **verify by probing** | Low |
+| Native 6-pin pinout | Maps to the standard 16-pin signals (CAN-H, CAN-L, K-line, 12 V, grounds); **confirm exact pin positions** by service manual / probing before connecting | Low |
+
+Street Triple 765 uses the same red 6-pin connector located in the tail.
+
+> ⚠️ **Top risk to resolve first (Phase 2):** does the diagnostic port expose
+> **free-running broadcast** CAN traffic (ECUs continuously chattering, which our
+> **listen-only** sniffer can read), or only **request/response** diagnostic data
+> (KWP2000/UDS — where live values appear *only* after a tester sends a request)?
+> Our passive, listen-only design depends on the former. If brake/throttle/RPM are
+> only available on request, that conflicts with the
+> [listen-only golden rule](#1-golden-rule-listen-only) and forces a design rethink
+> (e.g. tapping an internal vehicle CAN where the ECUs broadcast among themselves,
+> rather than the diagnostic request/response channel). **Determine this before
+> anything else.**
+
+### Decode table (to fill in during sniffing)
+
+| Signal | CAN ID | Bits (start/len) | Scale / offset | Notes |
+|--------|--------|------------------|----------------|-------|
+| `brake_switch` | _TBD_ | _TBD_ | 1-bit | Front and/or rear stop switch — find both if separate. |
+| `throttle_pct` | _TBD_ | _TBD_ | → 0–100 % | Ride-by-wire, so a throttle/APS position should be on the bus. |
+| `rpm` | _TBD_ | _TBD_ | → rpm | Expect 16-bit. |
+| `clutch_pulled` | _TBD_ | _TBD_ | 1-bit | The 400 single may **not** expose a clutch switch — if absent, `DECEL` is disabled/conservative (see [firmware.md](firmware.md)). |
+| Bus bit rate | — | — | — | Confirm 250 vs 500 kbit/s. |
+| Free-running vs. request/response | — | — | — | **Answer the risk above.** |
+
+Commit anonymized raw captures under `transmitter/software/captures/` (e.g.
+`speed400_brake_sweep.log`) so the decode can be re-derived and the Scrambler 400 X /
+Street Triple can be compared against it.
+
+### Why this is a good reference choice
+
+- **Two bikes, one profile** (Speed 400 + Scrambler 400 X share the TR-series
+  powertrain) → immediate generalization with no extra reverse-engineering.
+- **Ride-by-wire** throttle means throttle position is electronic and on the bus.
+- Large, active 400 owner community already poking at the diagnostic port.
+- The Street Triple shares the connector, so proving the 400 also de-risks the TX
+  hardware for the triple.
 
 ---
 

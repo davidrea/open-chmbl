@@ -21,14 +21,19 @@ criterion so we know when to move on.
 - **Exit:** wave a fake state over the air → correct LED behavior + correct link-loss
   indication.
 
-## Phase 2 — CAN capture on the reference bike
+## Phase 2 — CAN capture on the reference bike (Triumph Speed 400)
 
-- Choose the reference bike (whoever owns one — see
-  [can-profiles.md §5](can-profiles.md#5-reference-target)).
-- Confirm diagnostic connector pinout, bit rate; capture raw frames (listen-only).
-- Reverse-engineer `brake_switch`, `throttle_pct`, `rpm`, `clutch_pulled`.
-- Fill in the `bike_profile_t` and commit anonymized capture logs.
-- **Exit:** offline replay of a capture recovers all four signals correctly.
+- **First: determine whether the diagnostic port broadcasts free-running CAN or only
+  responds to requests** — this gates the whole listen-only approach (see
+  [can-profiles.md §5](can-profiles.md#5-reference-target--triumph-speed-400-tr-series-platform)).
+- Confirm the red 6-pin connector pinout + bus bit rate by probing; capture raw
+  frames (listen-only).
+- Reverse-engineer `brake_switch`, `throttle_pct`, `rpm`, and `clutch_pulled` (the
+  400 single may not expose a clutch switch).
+- Fill in the `bike_profile_t`; **validate the same profile on the Scrambler 400 X**
+  (shared powertrain). Commit anonymized capture logs.
+- **Exit:** offline replay of a capture recovers all available signals; one profile
+  works on both 400s.
 
 ## Phase 3 — End-to-end on the bench
 
@@ -59,7 +64,9 @@ criterion so we know when to move on.
 
 | Topic | Question | Current lean |
 |-------|----------|--------------|
-| Reference bike | Which exact make/model/year? | Whatever the first contributor owns (Euro 5, CAN on diag port). |
+| Reference bike | Which exact make/model/year? | **Triumph Speed 400** (+ Scrambler 400 X, shared powertrain); Street Triple 765 as a stretch. |
+| CAN access mode | Free-running broadcast vs. request/response on the diag port? | **Unknown — Phase 2 gate.** Determines whether listen-only sniffing works at all. |
+| Street Triple support | Same profile or separate? | Separate profile (different platform), but same connector/TX hardware. |
 | LED array | Addressable (WS2812) vs. discrete high-power red + CC driver? | Discrete red — simpler legal-color/no-flash story, more efficient. |
 | Shared code | Real `shared/` lib vs. duplicated headers across `transmitter/software` and `brake_light/software`? | Start duplicated/symlinked; promote to a lib (or PlatformIO `lib_deps`) once it stabilizes. |
 | Framework | ESP-IDF vs. Arduino-ESP32? | ESP-IDF for TWAI + ESP-NOW + deep-sleep control. |

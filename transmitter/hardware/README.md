@@ -10,4 +10,9 @@ Key constraints:
 - Deep-sleep / load-shed when the bike is off (< 1 mA parked).
 - Sealed, IP65+, vibration- and heat-tolerant enclosure.
 
+Reference bike connector ([Triumph Speed 400 / Scrambler 400 X / Street Triple 765](../../docs/can-profiles.md#5-reference-target--triumph-speed-400-tr-series-platform)):
+**red 6-pin OBD2** under the seat, carrying CAN-H/CAN-L + K-line. Use a 6-pin →
+16-pin adapter, or wire a mating 6-pin plug directly. **Confirm exact pin positions
+and bus bit rate by probing before connecting.**
+
 _Schematics, BOM, and connector pinout to be added (Phase 4)._

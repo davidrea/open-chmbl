@@ -84,13 +84,20 @@ chain, then generalize.** The decoder is written against a small per-bike "profi
 (CAN ID + bit offsets + scaling) so adding a second bike later is a data change, not
 a rewrite — but we only fill in one profile now.
 
-The reference bike should be **whatever the first contributor actually owns and can
-put on a bench with the wheel spinning.** Recommended characteristics: Euro 5
-(post-2020), exposes CAN-H/CAN-L on the diagnostic connector, and ideally has an
-active hobbyist reverse-engineering community. See
-[`docs/can-profiles.md`](docs/can-profiles.md) for the sniffing methodology and the
-profile data structure, and **[`docs/can-profiles.md#reference-target`](docs/can-profiles.md#reference-target)**
-for where to record the chosen bike and its decoded frames.
+**The reference bike is the Triumph Speed 400.** Its sibling **Scrambler 400 X**
+shares the same TR-series 398 cc single powertrain/ECU, so one profile is expected to
+cover both. The **Street Triple 765** is a stretch target — a different platform
+(triple, separate ECU = its own profile) but the same red 6-pin diagnostic connector,
+so the TX hardware carries over. Both expose CAN-H/CAN-L (plus a K-line) on a red
+6-pin OBD2 port under the seat. See
+[`docs/can-profiles.md`](docs/can-profiles.md) for the sniffing methodology, the
+profile data structure, and **[`docs/can-profiles.md#5-reference-target--triumph-speed-400-tr-series-platform`](docs/can-profiles.md#5-reference-target--triumph-speed-400-tr-series-platform)**
+for the connector details and decode table.
+
+> ⚠️ The single biggest unknown for these bikes is whether the diagnostic port
+> exposes **free-running broadcast** CAN (which our listen-only sniffer can read) or
+> only **request/response** diagnostic data. Resolving that is the first job in
+> Phase 2 — see the CAN doc.
 
 ---
 
