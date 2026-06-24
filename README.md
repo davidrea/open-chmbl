@@ -24,8 +24,11 @@ Two units, both ESP32-based:
 ## Start here
 
 - **[`ARCHITECTURE.md`](ARCHITECTURE.md)** — system overview and design index.
-- [`docs/hardware.md`](docs/hardware.md) · [`docs/firmware.md`](docs/firmware.md) ·
-  [`docs/protocol.md`](docs/protocol.md) ·
+- **[`docs/feature-functions.md`](docs/feature-functions.md)** — per-device capabilities.
+- **[`docs/design/README.md`](docs/design/README.md)** — how we build it: design
+  elements, implemented one at a time in isolation.
+- [`docs/cli.md`](docs/cli.md) · [`docs/hardware.md`](docs/hardware.md) ·
+  [`docs/firmware.md`](docs/firmware.md) · [`docs/protocol.md`](docs/protocol.md) ·
   [`docs/can-profiles.md`](docs/can-profiles.md) ·
   [`docs/safety-regulatory.md`](docs/safety-regulatory.md) ·
   [`docs/roadmap.md`](docs/roadmap.md)

@@ -192,12 +192,17 @@ open-chmbl/
 ├── ARCHITECTURE.md            ← this file (index + overview)
 ├── README.md
 ├── docs/
+│   ├── feature-functions.md   ← per-device capability decomposition (FFL IDs)
+│   ├── cli.md                 ← developer CLI to fake/view I/O (isolation testing)
 │   ├── hardware.md            ← BOM, power, connectors, enclosures
 │   ├── firmware.md            ← tasks, state machine, config, build
 │   ├── protocol.md            ← ESP-NOW message + pairing + failsafe
 │   ├── can-profiles.md        ← CAN sniffing method + per-bike profile format
 │   ├── safety-regulatory.md   ← legal, functional safety, helmet safety
-│   └── roadmap.md             ← phased plan, milestones, open questions
+│   ├── roadmap.md             ← phased plan, milestones, open questions
+│   └── design/                ← per-element design docs (build one at a time)
+│       ├── README.md          ← process, template, design-element build order
+│       └── de-*.md            ← ESP-NOW, auto-brightness, link-loss, CAN, BRAKE/DECEL
 ├── transmitter/               ← bike-side unit
 │   ├── hardware/              ← schematics, BOM, connector, enclosure
 │   └── software/              ← ESP32 firmware (TWAI listen-only + ESP-NOW TX)
@@ -213,8 +218,20 @@ real shared library or duplicated headers.
 
 ---
 
-## 8. Where to go next
+## 8. How we build it
 
+We don't use shall-statement requirements. Instead:
+**[feature-function lists](docs/feature-functions.md) → [design elements](docs/design/README.md)
+→ isolated implementation → integration.** Each design element is built and proven on
+its own, with its inputs **faked** and outputs **viewed** through the per-device
+[developer CLI](docs/cli.md). The element build order lives in
+[`docs/design/README.md`](docs/design/README.md).
+
+## 9. Where to go next
+
+- The capabilities, per device: [`docs/feature-functions.md`](docs/feature-functions.md)
+- The build process & element order: [`docs/design/README.md`](docs/design/README.md)
+- The developer CLI (fake/view I/O): [`docs/cli.md`](docs/cli.md)
 - Understand the parts and power: [`docs/hardware.md`](docs/hardware.md)
 - Understand the code structure & state machine: [`docs/firmware.md`](docs/firmware.md)
 - Understand the radio link: [`docs/protocol.md`](docs/protocol.md)

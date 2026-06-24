@@ -8,18 +8,23 @@ criterion so we know when to move on.
 ## Phase 0 — Architecture (this pass)
 
 - ✅ System architecture, docs, repo skeleton.
+- ✅ Per-device [feature-function lists](feature-functions.md), the
+  [design-element framework](design/README.md), and the [developer CLI](cli.md) spec.
 - **Exit:** agreed design + directory structure (`transmitter/` and `brake_light/`,
-  each with `hardware/` + `software/`).
+  each with `hardware/` + `software/`); FFLs and the isolated build order in place.
 
 ## Phase 1 — Bench bring-up (no bike)
 
-- ESP-NOW link between two dev boards: pre-pairing, encrypted peer, heartbeat at
-  20–50 Hz, link-loss failsafe on the RX.
-- RX drives a placeholder LED bar from a faked `brake_state_t` stream.
-- Host-side unit tests for the **state machine** and **profile decoder** (pure
-  functions, no hardware).
-- **Exit:** wave a fake state over the air → correct LED behavior + correct link-loss
-  indication.
+Built as isolated [design elements](design/README.md), one at a time, each exercised
+through the [developer CLI](cli.md):
+
+- **DE-00** CLI/shell framework on both devices (prerequisite — makes the rest
+  testable in isolation).
+- **DE-01** ESP-NOW link: pre-pairing, encrypted peer, heartbeat at 20–50 Hz, seq.
+- **DE-02** auto-brightness; **DE-03** link-loss failsafe; **DE-04** LED render.
+- Host-side unit tests for the pure cores (state machine, profile decoder).
+- **Exit:** each element passes its isolation acceptance (see its design doc); waving a
+  faked state over the air drives correct render + link-loss behaviour.
 
 ## Phase 2 — CAN capture on the reference bike (Triumph Speed 400)
 
