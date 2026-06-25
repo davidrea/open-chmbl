@@ -214,7 +214,7 @@ F_theoretical = 50 / 0.33 ≈ 152 N
 A = F_theoretical × 2μ₀ / Br²
 ```
 
-#### N42H example (Br = 1.30 T)
+#### N42 example (Br = 1.30 T)
 
 ```
 A = 152 × 2 × 1.257 × 10⁻⁶ / (1.30²)
@@ -224,7 +224,7 @@ A = 152 × 2 × 1.257 × 10⁻⁶ / (1.30²)
 Disc diameter d = 2 × √(A/π) = 2 × √(2.26 × 10⁻⁴ / 3.14159) ≈ 17 mm
 ```
 
-#### N35H example (Br = 1.18 T)
+#### N35 example (Br = 1.18 T)
 
 ```
 A = 152 × 2 × 1.257 × 10⁻⁶ / (1.18²)
@@ -241,19 +241,20 @@ All candidates are **disc magnets** (circular cross-section). Dimensions are
 
 | Candidate | Br (T) | Diameter | Thickness | Predicted peel release | Notes |
 |-----------|--------|----------|-----------|----------------------|-------|
-| **20 mm dia. × 4 mm thick N42H** | 1.28–1.32 | 20 mm | 4 mm | **~55–65 N** | Starting point; sits near the upper end of the window — good margin. |
-| **15 mm dia. × 4 mm thick N42H** | 1.28–1.32 | 15 mm | 4 mm | **~30–40 N** | Weaker alternative if 20 mm proves too strong; lower end of window. |
-| **20 mm dia. × 4 mm thick N35H** | 1.17–1.22 | 20 mm | 4 mm | **~45–55 N** | Slightly softer; good if N42H peel is too close to the 80 N ceiling. |
+| **20 mm dia. × 4 mm thick N42** | 1.28–1.32 | 20 mm | 4 mm | **~55–65 N** | Starting point; sits near the upper end of the window — good margin. |
+| **15 mm dia. × 4 mm thick N42** | 1.28–1.32 | 15 mm | 4 mm | **~30–40 N** | Weaker alternative if 20 mm proves too strong; lower end of window. |
+| **20 mm dia. × 4 mm thick N35** | 1.17–1.22 | 20 mm | 4 mm | **~45–55 N** | Slightly softer; good if N42 peel is too close to the 80 N ceiling. |
 
-All three are **H-grade** (continuous working temperature ≥ 120 °C) — required because
-a black helmet or dark jacket in direct sun can reach 60–80 °C at the surface, and
-standard N-grade magnets (80 °C max) would partially demagnetize and lose pull
-unpredictably over time. See [magnet selection](#magnet-selection) below for coating
-and corrosion notes.
+Standard N-grade (max continuous 80 °C) is used throughout. The magnet lives inside
+the sealed enclosure rather than on the outer shell, and airflow while riding keeps
+sustained temperatures well below the limit. The 70 °C thermal soak in the bench
+protocol (step 6) is the validation gate: if peel force stays within the 30–80 N
+window after soak, standard N-grade is confirmed adequate. See
+[magnet selection](#magnet-selection) for coating and corrosion notes.
 
-**Use N42H / 20 mm dia. × 4 mm thick as the initial bench candidate.** Tune from there:
-- Peel too high (>80 N): try N35H 20 mm dia., or reduce diameter to 15 mm.
-- Peel too low (<30 N): increase thickness to 6 mm, or step to N48H (Br ≈ 1.40 T).
+**Use N42 / 20 mm dia. × 4 mm thick as the initial bench candidate.** Tune from there:
+- Peel too high (>80 N): try N35 20 mm dia., or reduce diameter to 15 mm.
+- Peel too low (<30 N): increase thickness to 6 mm, or step to N48 (Br ≈ 1.40 T).
 - Adjust pocket depth (shallower → easier peel; deeper → more wind resistance before peel).
 
 ### Bench verification protocol
@@ -289,10 +290,11 @@ A spring-force gauge is all that's needed:
   light index to the right position and orientation without fiddling.
 
 ### Magnet selection
-- **Neodymium**, but mind temperature: a **black helmet or jacket in direct sun** can
-  sit well above ambient. Standard N-grades start losing force as they heat; specify a
-  **higher working-temperature grade** (e.g. an `xxM`/`xxH` temper) sized for the worst
-  case, or de-rate the pull accordingly.
+- **Standard N-grade neodymium** (N35/N42/N48). The magnet is inside the enclosure,
+  not on the outer shell, so sustained surface temperatures are moderate; airflow while
+  riding keeps them well within the 80 °C continuous rating. The bench thermal soak
+  (70 °C, 30 min) in the verification protocol is the gate — if force stays in-window,
+  no special grade is needed.
 - **Corrosion protection** — sweat and weather mean **Ni-Cu-Ni or epoxy-coated**
   magnets and a **coated/stainless or sealed** steel target.
 - No magnetic-sensitivity worries on our side (the ESP32 and radio don't care); just
