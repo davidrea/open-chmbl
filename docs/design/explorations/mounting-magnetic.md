@@ -221,7 +221,7 @@ A = 152 × 2 × 1.257 × 10⁻⁶ / (1.30²)
   = 3.82 × 10⁻⁴ / 1.69
   = 2.26 × 10⁻⁴ m²
 
-Diameter d = 2 × √(A/π) = 2 × √(2.26 × 10⁻⁴ / 3.14159) ≈ 17 mm
+Disc diameter d = 2 × √(A/π) = 2 × √(2.26 × 10⁻⁴ / 3.14159) ≈ 17 mm
 ```
 
 #### N35H example (Br = 1.18 T)
@@ -231,16 +231,19 @@ A = 152 × 2 × 1.257 × 10⁻⁶ / (1.18²)
   = 3.82 × 10⁻⁴ / 1.393
   = 2.74 × 10⁻⁴ m²
 
-Diameter d = 2 × √(2.74 × 10⁻⁴ / 3.14159) ≈ 19 mm
+Disc diameter d = 2 × √(2.74 × 10⁻⁴ / 3.14159) ≈ 19 mm
 ```
 
 ### Starting candidates to evaluate
 
-| Candidate | Br (T) | Dimensions | Predicted peel release | Notes |
-|-----------|--------|------------|----------------------|-------|
-| **Single 20 mm × 4 mm N42H** | 1.28–1.32 | 20 mm dia., 4 mm thick | **~55–65 N** | Starting point; sits near the upper end of the window — good margin. |
-| **Single 15 mm × 4 mm N42H** | 1.28–1.32 | 15 mm dia., 4 mm thick | **~30–40 N** | Weaker alternative if 20 mm proves too strong; lower end of window. |
-| **Single 20 mm × 4 mm N35H** | 1.17–1.22 | 20 mm dia., 4 mm thick | **~45–55 N** | Slightly softer; good if N42H peel is too close to the 80 N ceiling. |
+All candidates are **disc magnets** (circular cross-section). Dimensions are
+**diameter × thickness**.
+
+| Candidate | Br (T) | Diameter | Thickness | Predicted peel release | Notes |
+|-----------|--------|----------|-----------|----------------------|-------|
+| **20 mm dia. × 4 mm thick N42H** | 1.28–1.32 | 20 mm | 4 mm | **~55–65 N** | Starting point; sits near the upper end of the window — good margin. |
+| **15 mm dia. × 4 mm thick N42H** | 1.28–1.32 | 15 mm | 4 mm | **~30–40 N** | Weaker alternative if 20 mm proves too strong; lower end of window. |
+| **20 mm dia. × 4 mm thick N35H** | 1.17–1.22 | 20 mm | 4 mm | **~45–55 N** | Slightly softer; good if N42H peel is too close to the 80 N ceiling. |
 
 All three are **H-grade** (continuous working temperature ≥ 120 °C) — required because
 a black helmet or dark jacket in direct sun can reach 60–80 °C at the surface, and
@@ -248,8 +251,8 @@ standard N-grade magnets (80 °C max) would partially demagnetize and lose pull
 unpredictably over time. See [magnet selection](#magnet-selection) below for coating
 and corrosion notes.
 
-**Use N42H / 20 mm × 4 mm as the initial bench candidate.** Tune from there:
-- Peel too high (>80 N): try N35H 20 mm, or reduce diameter to 15 mm.
+**Use N42H / 20 mm dia. × 4 mm thick as the initial bench candidate.** Tune from there:
+- Peel too high (>80 N): try N35H 20 mm dia., or reduce diameter to 15 mm.
 - Peel too low (<30 N): increase thickness to 6 mm, or step to N48H (Br ≈ 1.40 T).
 - Adjust pocket depth (shallower → easier peel; deeper → more wind resistance before peel).
 

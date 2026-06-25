@@ -73,7 +73,7 @@ not suggestions.
   - **Garment / backpack shoulder mount (Exploration A):** magnets rest against the
     upper back, with only 15–25 cm of body tissue between them and a typical implant
     site. Field modelling (dipole approximation) places the 0.5 mT boundary at
-    approximately **7–10 cm** from a single 20 mm × 4 mm N42 magnet. With two or more
+    approximately **7–10 cm** from a single 20 mm dia. × 4 mm thick N42 disc magnet. With two or more
     magnets, or a thinner rider, the field at implant depth cannot be guaranteed to stay
     below this threshold. **Persons with any implanted cardiac device must not use the
     garment / backpack shoulder mount.**
