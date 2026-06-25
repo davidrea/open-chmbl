@@ -89,6 +89,189 @@ stays on each helmet** and the **magnets that live in the light**.
 
 ---
 
+## Force analysis and initial magnet sizing
+
+The whole game is the **force window**: hold firmly through everything normal riding
+throws at the mount; release cleanly and predictably in the direction a crash snag
+would pull. This section develops that window from first principles and translates it
+into a starting magnet size and remanence (Br, in Tesla) to evaluate on the bench.
+
+### Required hold force (minimum)
+
+Normal-riding loads on a helmet-mounted light are smaller than intuition suggests —
+aerodynamic drag on a small body is modest, and it's inertial shock loads that set
+the floor:
+
+| Load | Basis | Force |
+|------|-------|-------|
+| Aerodynamic drag at 130 km/h (36 m/s) | F = ½ρCdAv²; ρ = 1.225 kg/m³, Cd ≈ 0.8 (bluff body), A ≈ 80 cm² = 0.008 m² | **≈ 5 N** |
+| Inertial — hard braking at 0.8g | F = m × a; device mass ≈ 200 g, a = 0.8 × 9.81 | **≈ 1.6 N** |
+| Inertial — road impact / kerb at 3g | F = m × a; 200 g × 3 × 9.81 | **≈ 5.9 N** |
+| Vibration (sustained lateral/vertical) | ~1–2 N continuous | **≈ 2 N** |
+
+Realistic worst case (aero + road shock, same axis): **~11 N**.
+With a **2.5× safety margin** to account for gusts, resonance, and device-mass growth:
+**hold ≥ 28 N → round to 30 N target.**
+
+Wind force alone is ≤ 5 N at highway speed. The magnets are *not* at risk of
+shearing off from wind; vibration and shock are the constraining loads, and they're
+still modest.
+
+### Required release force (maximum)
+
+The release limit is set by **what happens to the rider, not the device**, if the
+mount does *not* let go during a crash snag.
+
+For the **helmet mount (Exploration B)**, a snagged light applies a lateral force to
+the helmet shell. The helmet sits approximately 60–80 mm from the effective neck pivot
+(occiput–C1). The torque that force creates about the neck:
+
+```
+M_neck = F_snag × L_arm   (L_arm ≈ 70 mm)
+```
+
+Rotational neck-injury risk rises sharply above roughly 30–40 N·m of applied moment
+(this is the regime addressed by ECE 22.06 oblique-impact tests). Working backwards:
+
+```
+F_snag limit = M_neck / L_arm = 35 N·m / 0.07 m ≈ 500 N
+```
+
+So the neck is mechanically tolerant of much higher forces than the magnet needs to
+produce — but **the goal of a breakaway mount is to release before any significant
+load is transmitted**, not to resist injury-level loads. Practical breakaway-mount
+targets for helmet attachments (e.g. action-camera breakaway mounts designed for
+motorsport helmets) converge on **50–100 N**, providing a large margin below the
+neck-tolerance limit and releasing early in the snag event.
+
+**Release target: ≤ 80 N** (in the dominant snag direction — peel).
+
+For the **garment mount (Exploration A)**, the snag-to-neck force path is much longer
+and less direct; the same 30–80 N window applies, but here it governs device retention
+(shedding at speed = road debris) rather than direct rider injury risk.
+
+**Design force window: hold ≥ 30 N, release ≤ 80 N.**
+Good operating point: **40–60 N** in the primary failure direction.
+
+### Why peel, not shear, is the right failure mode
+
+There are two ways a magnet can separate from a steel target:
+
+| Mode | Description | Force relative to pull |
+|------|-------------|----------------------|
+| **Shear** | Magnet slides laterally across the target face | ≈ μ × F_pull; μ ≈ 0.10–0.15 (smooth coated surfaces) → **10–15 % of pull** |
+| **Peel** | One edge lifts first; the contact area reduces progressively | ≈ 40–60 % of F_pull, geometry-dependent |
+
+Shear force is actually **lower** than peel force for a given magnet, but its
+relationship to the pull force is dominated by surface friction — highly variable
+depending on coatings, contamination, and surface finish. More importantly, shear is
+the direction **wind acts on the mount** (lateral to the mount face). If we rely on
+shear release in a crash, we've also created a mount that the wind can release.
+
+**Peel is better for two reasons:**
+
+1. Wind applies a *lateral shear* force, which a shallow retention pocket resists
+   independently of the magnets. A 2–3 mm pocket around the steel target means the
+   device must lift **up** before it can slide sideways — converting a wind-shear
+   load into a peel load that the magnet resists strongly.
+2. A crash snag applies a force with a moment arm about the mount edge — exactly the
+   condition that initiates peel. Peel force is tunable (via pocket depth, magnet
+   area, and Br) and more consistent than friction-dependent shear.
+
+**Design the pocket to make peel the only release mode.** Wind forces stay inside the
+pocket; snag forces peel it off.
+
+### Pull-force formula and magnet sizing
+
+For a neodymium disc magnet pressed flush against a thick ferromagnetic steel plate
+(the theoretical maximum, achieved at zero air gap):
+
+```
+F_pull = (Br² × A) / (2μ₀)
+```
+
+- **Br** = remanence field (T) — the magnet's N-grade specification
+- **A** = pole-face area (m²)
+- **μ₀** = 4π × 10⁻⁷ ≈ 1.257 × 10⁻⁶ H/m
+
+Real-world efficiency relative to this formula: **60–70 %** (coatings, fabric layer
+in the garment mount, plate thickness, surface irregularities). Use **65 %** as the
+planning factor.
+
+Peel release at the geometry of interest is approximately **50 % of the effective pull
+force** (this varies with aspect ratio and pocket depth — characterize on the bench).
+So the chain is:
+
+```
+F_peel ≈ 0.50 × F_effective = 0.50 × 0.65 × F_theoretical = 0.33 × F_theoretical
+```
+
+To hit a peel release of **50 N** (midpoint of our window):
+
+```
+F_theoretical = 50 / 0.33 ≈ 152 N
+
+A = F_theoretical × 2μ₀ / Br²
+```
+
+#### N42H example (Br = 1.30 T)
+
+```
+A = 152 × 2 × 1.257 × 10⁻⁶ / (1.30²)
+  = 3.82 × 10⁻⁴ / 1.69
+  = 2.26 × 10⁻⁴ m²
+
+Diameter d = 2 × √(A/π) = 2 × √(2.26 × 10⁻⁴ / 3.14159) ≈ 17 mm
+```
+
+#### N35H example (Br = 1.18 T)
+
+```
+A = 152 × 2 × 1.257 × 10⁻⁶ / (1.18²)
+  = 3.82 × 10⁻⁴ / 1.393
+  = 2.74 × 10⁻⁴ m²
+
+Diameter d = 2 × √(2.74 × 10⁻⁴ / 3.14159) ≈ 19 mm
+```
+
+### Starting candidates to evaluate
+
+| Candidate | Br (T) | Dimensions | Predicted peel release | Notes |
+|-----------|--------|------------|----------------------|-------|
+| **Single 20 mm × 4 mm N42H** | 1.28–1.32 | 20 mm dia., 4 mm thick | **~55–65 N** | Starting point; sits near the upper end of the window — good margin. |
+| **Single 15 mm × 4 mm N42H** | 1.28–1.32 | 15 mm dia., 4 mm thick | **~30–40 N** | Weaker alternative if 20 mm proves too strong; lower end of window. |
+| **Single 20 mm × 4 mm N35H** | 1.17–1.22 | 20 mm dia., 4 mm thick | **~45–55 N** | Slightly softer; good if N42H peel is too close to the 80 N ceiling. |
+
+All three are **H-grade** (continuous working temperature ≥ 120 °C) — required because
+a black helmet or dark jacket in direct sun can reach 60–80 °C at the surface, and
+standard N-grade magnets (80 °C max) would partially demagnetize and lose pull
+unpredictably over time. See [magnet selection](#magnet-selection) below for coating
+and corrosion notes.
+
+**Use N42H / 20 mm × 4 mm as the initial bench candidate.** Tune from there:
+- Peel too high (>80 N): try N35H 20 mm, or reduce diameter to 15 mm.
+- Peel too low (<30 N): increase thickness to 6 mm, or step to N48H (Br ≈ 1.40 T).
+- Adjust pocket depth (shallower → easier peel; deeper → more wind resistance before peel).
+
+### Bench verification protocol
+
+A spring-force gauge is all that's needed:
+
+1. Bond the steel target to a rigid backing with the correct VHB stack-up (simulating
+   helmet shell + tape).
+2. Seat the device; check that it indexes correctly into the pocket.
+3. **Shear pull (lateral):** apply force parallel to the face with a gauge — this
+   should hold above 30 N without releasing (peel should not initiate until the edge
+   lifts).
+4. **Peel pull:** apply force at the trailing edge to initiate peel — record the
+   peak force. Target: 40–60 N. Repeat 20 cycles; release force should be consistent.
+5. **Wind simulation:** aim a fan at realistic angles; confirm no detachment at
+   highway-equivalent dynamic pressure.
+6. **Temperature soak:** repeat after 30-minute oven soak at 70 °C (simulating sun-
+   heated surface) — confirm pull force does not drop more than 10–15 %.
+
+---
+
 ## Shared design notes (apply to both)
 
 ### Tuning the release
