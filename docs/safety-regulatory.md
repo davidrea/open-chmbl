@@ -54,7 +54,40 @@ not suggestions.
   close to the shell.
 - **Breakaway mounting.** The mount should **detach/shear** under impact rather than
   snag or transmit load to the head/neck. No rigid hooks or protrusions that can
-  catch.
+  catch. A [magnetic shear-release mount](design/explorations/mounting-magnetic.md) is
+  one **future-state** way to get this — the magnetic interface *is* the breakaway, and
+  anything bonded to a helmet is still **VHB tape only, never a drilled fastener**. The
+  hold force must be tuned to release below the snag/neck-load threshold; the new
+  failure mode to characterize is unintended detachment at speed (lost device / road
+  debris, not a rider-injury path).
+- **Implanted cardiac devices (pacemakers, ICDs, CRT).** The neodymium magnets in
+  a [magnetic shear-release mount](design/explorations/mounting-magnetic.md) produce
+  strong local fields (surface Br ≈ 1.2–1.4 T at the pole face). The accepted
+  interference threshold for most implanted cardiac devices is **≈ 0.5 mT (5 gauss)**
+  at the device — above which a pacemaker may switch to an asynchronous fixed-rate mode
+  and an ICD may be inhibited from delivering therapy.
+
+  The two mount variants sit very differently relative to a typical sub-clavicular
+  implant (upper chest, roughly 5–10 cm below the collarbone):
+
+  - **Garment / backpack shoulder mount (Exploration A):** magnets rest against the
+    upper back, with only 15–25 cm of body tissue between them and a typical implant
+    site. Field modelling (dipole approximation) places the 0.5 mT boundary at
+    approximately **7–10 cm** from a single 20 mm dia. × 4 mm thick N42 disc magnet. With two or more
+    magnets, or a thinner rider, the field at implant depth cannot be guaranteed to stay
+    below this threshold. **Persons with any implanted cardiac device must not use the
+    garment / backpack shoulder mount.**
+
+  - **Helmet mount (Exploration B):** magnets are on the rear of the helmet,
+    approximately **40–60 cm** from the upper chest — well into the far-field regime
+    where the stray field from even multiple magnets is a small fraction of 0.5 mT.
+    This is the **safe configuration** for riders with implanted devices.
+
+  Until the magnetic mount is experimentally characterized, anyone with a pacemaker,
+  ICD, or other magnetically sensitive implant should **use only the helmet-mount
+  configuration** and confirm acceptability with their device's manufacturer or
+  cardiologist before riding with any magnet-based mount.
+
 - **Battery safety.** LiPo on/near the head demands a **protected cell**, proper
   charge IC, over-current/over-discharge protection, and a sealed, vented enclosure.
   Don't charge unattended near the helmet's foam.

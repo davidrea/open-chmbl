@@ -57,7 +57,10 @@ sees and touches, so usability (charging, on/off, brightness) matters.
           sharing)                                            ├─▶ LED driver ──▶ Red LED bar
  Ambient-light sensor ─────────────────────────────────────▶ │   (constant-current
  Fuel-gauge / ADC ─────────────────────────────────────────▶ │    or addressable)
-                                                              └─▶ Mode/pair button + status LED
+                                                              ├─▶ Mode/pair button
+                                                              └─▶ Status-indicator LED
+                                                                  (RGB WS2812, separate
+                                                                   from the bar)
 ```
 
 ### Parts (sketch)
@@ -71,8 +74,9 @@ sees and touches, so usability (charging, on/off, brightness) matters.
 | LED array | High-power **red** LEDs + constant-current driver, **or** WS2812-style addressable | Addressable = easy patterns but more current/complexity. Plain red + CC driver = efficient, simplest legal-color story. |
 | Brightness control | PWM dimming + **ambient light sensor** | Night brightness must not blind following drivers; day brightness must be visible in sun. Auto-dim is a real safety feature, not a nicety. |
 | Battery monitor | Fuel gauge IC or ADC divider | Low-battery warning pattern + cutoff. |
-| User I/O | One button + small status LED | Power, pairing, brightness cycle. |
-| Mount | Non-penetrating, **breakaway** | Adhesive pad or strap; see safety doc. **Never drill the helmet.** |
+| User I/O | One button | Power, pairing, brightness cycle. |
+| Status indicator | **Addressable RGB LED** (WS2812-class), **separate from the main bar** | Discrete status/fault by **color + blink code** (pairing, link, charge, fault) — legible even when the bar is off. Can reuse a **module's onboard WS2812** (see §2.1). See [`de-10`](design/de-10-status-indicator.md). |
+| Mount (baseline) | Non-penetrating, **breakaway** | Adhesive pad or strap; see safety doc. **Never drill the helmet.** Magnetic shear-release variants are a [future-state exploration](design/explorations/mounting-magnetic.md). |
 | Enclosure | **IP65+**, low-profile, lightweight | Mass on a helmet contributes to neck load in a crash — minimize it. |
 
 ### Runtime budgeting (worked example)
@@ -92,6 +96,44 @@ That's a comfortable full-day-of-riding target. Brake events are brief and brigh
 the *average* is what sets runtime, so auto-dimming and an `OFF`/dim-running idle
 state matter a lot. Tune the battery size to the LED bar you choose.
 
+### 2.1 Integrated module candidates (WS2812 + LiPo charger)
+
+To **cut the parts we have to design in**, we want a dev-board-style ESP32-C3 module
+that already carries **(a) a LiPo charger** (replaces the discrete charge IC / load-share
+design) and **(b) an onboard WS2812 addressable LED** (serves the
+[status indicator](design/de-10-status-indicator.md) for free). The main red brake bar
+stays external regardless — the onboard WS2812 is a *status* LED, not the bar (the
+legal-color/no-flash story keeps the bar as discrete red or its own addressable strip).
+
+**Reality check:** very few compact C3 boards carry **both** at once — most have one or
+the other. Survey of candidates (verify against the current datasheet before committing
+— vendors revise silently):
+
+| Board | LiPo charger | Onboard WS2812 | Notes |
+|-------|:------------:|:--------------:|-------|
+| **LOLIN / Wemos C3 Pico** | ✅ | ✅ | Strongest "both onboard" candidate — D1-mini-class form, RGB + LiPo charging per vendor docs. **Confirm charger chip + RGB GPIO on the schematic.** |
+| **DFRobot FireBeetle 2 ESP32-C3** | ✅ | ❔ | FireBeetle 2 line pairs onboard charging with a WS2812 on some variants (confirmed on the ESP32-E); **confirm the C3 SKU specifically.** |
+| **DFRobot Beetle ESP32-C3** (DFR0868) | ✅ (TP4057) | ❌ | Coin-size, charger onboard, but **no** addressable RGB — would still need an external WS2812. |
+| **Seeed XIAO ESP32-C3** | ✅ (ETA4054, ~370 mA, JST-PH) | ❌ | Tiny, ubiquitous, great charger story; **only a red charge LED** — add an external WS2812 for the indicator. |
+| **Olimex ESP32-C3-DevKit-Lipo** | ✅ | ❌ (plain status LEDs) | **Open-source hardware** (a plus for this project); stocked at **LCSC** (`C17694452`, ~$6–7). |
+| **Waveshare ESP32-C3-Zero** | ❌ | ✅ (GPIO10) | RGB onboard, **no** charger — pair with an external charge IC. |
+| **ESP32-C3 SuperMini *Plus*** | ❌ | ✅ (GPIO8, shared w/ blue LED) | Cheap; RGB but no charger. (Plain "SuperMini" has neither RGB nor charger.) |
+| **Espressif ESP32-C3-DevKitC/M** | ❌ | ✅ | Reference devkit; WS2812 onboard, no charger. |
+
+**LCSC availability (soft preference):** the most LCSC-clean path is actually a **bare
+module** — `ESP32-C3-MINI-1` / `ESP32-C3-WROOM-02` — plus discrete **WS2812B**
+(`C2761795` / `C114586`, or small `WS2812B-2020` / `WS2812B-Mini` for a low-profile
+indicator) and a charge IC (TP4056 / MCP73871), all stocked at LCSC. A finished
+dev-board with everything onboard trades an LCSC-friendly BOM for less hand-design; the
+Olimex C3-DevKit-Lipo is the one surveyed board that is **both** integrated **and** on
+LCSC, though it lacks the onboard WS2812.
+
+**Lean:** treat "onboard WS2812 + onboard charger" as a *nice-to-have* that picks the
+module when a clean one exists (LOLIN C3 Pico / a confirmed FireBeetle 2 C3), but don't
+let it gate the design — the fallback (XIAO C3 for charging + one external WS2812, or a
+bare module + both discretes) is cheap and fully LCSC-sourceable. Decision tracked in
+[`roadmap.md`](roadmap.md).
+
 ---
 
 ## 3. Open hardware questions
@@ -100,6 +142,12 @@ state matter a lot. Tune the battery size to the LED bar you choose.
   [`can-profiles.md`](can-profiles.md)).
 - LED bar: addressable vs. discrete high-power red — affects driver, current, and
   the legal-color/no-flash story.
+- ESP32-C3 **module choice** (§2.1): an integrated "WS2812 + LiPo charger" board vs. a
+  bare module + discrete charger/indicator. Nice-to-have, not a gate.
+- **Mount direction:** keep the adhesive/strap breakaway baseline, or pursue a
+  [magnetic shear-release mount](design/explorations/mounting-magnetic.md)
+  (helmet-interchangeable VHB steel targets, and/or a garment/backpack shoulder mount)?
+  Future-state exploration.
 - Whether to add a small inertial sensor purely as a *cross-check / tamper or
   fallen-helmet detector* (NOT for brake detection — that's the patented approach we
   avoid). Deferred.

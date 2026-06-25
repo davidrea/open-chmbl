@@ -66,8 +66,21 @@ testable in isolation; CAN-dependent elements last, after captures exist). Statu
 | **DE-07** | CAN capture & offline analysis | host (PCAN/Pi) | (enables TX-DEC) | — | 🔲 |
 | **DE-08** | [Embedded CAN decode](de-08-can-decode.md) | transmitter | TX-CAN-*, TX-DEC-* | DE-00, DE-07 | 🔲 |
 | **DE-09** | [BRAKE/DECEL logic](de-09-brake-decel-logic.md) | transmitter | TX-SM-* | DE-00, DE-08 | 🔲 |
+| **DE-10** | [Status-indicator LED](de-10-status-indicator.md) | brake_light | BL-IND-* | DE-00 | 🔲 |
 
 DE-04…DE-06 don't have stub docs yet; they get one when scheduled. DE-07 is the
 bench/ride reverse-engineering captured in [`can-profiles.md`](../can-profiles.md).
 
 This table is the single source of truth for "what's the next isolated piece."
+
+---
+
+## 4. Future-state explorations
+
+Directions we want on record but have **not** committed to the build order above.
+They live in [`explorations/`](explorations/README.md) and get promoted to a
+`de-*` element (with FFL traceability and an isolation test) only when scheduled:
+
+- [Magnetic mounting](explorations/mounting-magnetic.md) — garment/backpack shoulder
+  mount and interchangeable VHB-on-helmet steel targets, both using magnets for a
+  built-in shear release.

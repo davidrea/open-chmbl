@@ -108,9 +108,25 @@ brake_light (helmet-side).
 - BL-LED-1 — Drive the LED bar at commanded brightness (PWM/constant-current).
 - BL-LED-2 — Respect thermal / current limits.
 
+### BL-IND — Status indicator LED
+A **small dedicated indicator**, separate from the main brake-light array, for
+discrete status and fault reporting. Maps cleanly onto a single addressable RGB LED
+(WS2812-class) — see [`hardware.md §2`](hardware.md#2-brake_light-helmet-side).
+- BL-IND-1 — Drive a status-indicator LED that is **independent of the main LED bar**
+  (a fault is legible even when the bar is off, dim, or itself the problem).
+- BL-IND-2 — Convey discrete states by **color and/or blink code** (e.g. pairing,
+  link health, charging, low battery, fault classes).
+- BL-IND-3 — Report **error / fault codes** as distinguishable blink patterns (or
+  colors) so a specific fault can be read off without a console.
+- BL-IND-4 — Keep the indicator **steady or slow** (anti-strobe); it must never be
+  mistaken for, or interfere with, the braking signal on the main bar.
+- BL-IND-5 — Optionally dim/disable the indicator at night so it doesn't distract the
+  rider, without losing fault legibility on demand.
+
 ### BL-UI — User interface
 - BL-UI-1 — Button: power, enter pairing, cycle brightness cap.
-- BL-UI-2 — Status indicator for link / pairing / battery / fault.
+- BL-UI-2 — Surface link / pairing / battery / fault state to the rider via the
+  [status-indicator LED](#bl-ind--status-indicator-led) (BL-IND).
 
 ### BL-CFG — Configuration & persistence
 - BL-CFG-1 — Persist peer/keys, brightness cap, and running-light option (NVS).
@@ -121,6 +137,7 @@ brake_light (helmet-side).
 - BL-CLI-3 — Fake battery state-of-charge.
 - BL-CLI-4 — View render output (state + commanded brightness + pattern).
 - BL-CLI-5 — View link / battery / failsafe status; trigger pairing; get/set config.
+- BL-CLI-6 — Drive/preview the status-indicator LED (force a code/color) and view its current state.
 
 ---
 
