@@ -38,6 +38,7 @@ always **viewable** regardless of source. This single mechanism is what makes
 | ESP-NOW link (DE-01) | TX: `state`; | BL: `link`, `render` |
 | Auto-brightness (DE-02) | BL: `ambient` | BL: `render` (brightness) |
 | Link-loss failsafe (DE-03) | (stop TX heartbeat) | BL: `link`, `render` |
+| Status indicator (DE-10) | BL: `ind` (force code/color) | BL: `ind show` |
 | CAN decode (DE-08) | TX: replay capture / `can` frames | TX: `sig` (decoded) |
 | BRAKE/DECEL logic (DE-09) | TX: `sig` (brake/throttle/rpm/clutch) | TX: `state` |
 
@@ -105,6 +106,9 @@ Realizes [BL-CLI-1…5](feature-functions.md#bl-cli--developer-cli).
 | `led test <pattern>` | Drive a fixed pattern (bench LED check). | BL-CLI-4 |
 | `link show` | Link state, last-rx age, timeout, failsafe status. | BL-CLI-5 |
 | `bright cap <0..100>` | Set the user brightness cap. | BL-CLI-5 |
+| `ind show` | Status-indicator: current code, color/blink, source. | BL-CLI-6 |
+| `ind test <code\|color\|off>` | Force an indicator code/color (preview a blink code). | BL-CLI-6 |
+| `ind source status\|fake` | Switch back to live status aggregation. | BL-CLI-6 |
 
 ---
 

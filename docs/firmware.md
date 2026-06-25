@@ -96,6 +96,7 @@ battery, manage pairing and link-loss.
 | **Link watchdog** | 10 Hz | If `now - last_rx_time > LINK_TIMEOUT_MS` → link-lost indication. |
 | **Battery** | 1 Hz | Fuel gauge → low-battery pattern + cutoff. |
 | **UI / pairing** | event | Button: power, enter pairing, cycle brightness cap. |
+| **Status indicator** | 10–20 Hz | Aggregate device status → drive the separate indicator LED (color/blink code); independent of the main bar. |
 
 ### Pattern engine (suggested mapping)
 
@@ -105,10 +106,33 @@ battery, manage pairing and link-loss.
 | `DECEL` | Medium-brightness steady red. **No flashing** (default). |
 | `BRAKE` | Full-brightness steady red. |
 | **link-lost** | Steady running light **+ slow fault blink** (distinct from braking). |
-| low-battery | Brief periodic amber/dim blink of the status LED, not the main bar. |
+| low-battery | Brief periodic amber/dim blink of the **status-indicator LED**, not the main bar. |
 
 All transitions are rate-limited so the main bar can't strobe.
 `LINK_TIMEOUT_MS` target: **≤ 300 ms**.
+
+### Status-indicator LED (separate from the bar)
+
+A small **addressable RGB LED**, independent of the main array, carries discrete
+status and fault reporting by **color and/or blink code** — readable even when the bar
+is off, dimmed, or itself faulted. It can be the chosen module's **onboard WS2812** (see
+[`hardware.md §2.1`](hardware.md#21-integrated-module-candidates-ws2812--lipo-charger)).
+Design element [DE-10](design/de-10-status-indicator.md); capabilities BL-IND-*.
+
+A starting code table (resolve by priority, highest first):
+
+| Status | Suggested indicator |
+|--------|---------------------|
+| fault / error | Red — **blink code** encodes the fault class (count the blinks). |
+| pairing | Blue, slow pulse. |
+| link-lost | Amber, slow blink (mirrors the bar's fault blink). |
+| charging | Steady amber; **green** when full. |
+| low battery | Red, brief periodic blink. |
+| OK / idle | Off, or a dim "armed" tick (night-dimmed). |
+
+Lean on **blink patterns**, not color alone, for the safety-relevant distinctions
+(color-blind legibility). The indicator is **anti-strobe** and must never be confused
+with the braking signal.
 
 ### Failsafe philosophy
 

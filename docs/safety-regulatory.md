@@ -54,7 +54,12 @@ not suggestions.
   close to the shell.
 - **Breakaway mounting.** The mount should **detach/shear** under impact rather than
   snag or transmit load to the head/neck. No rigid hooks or protrusions that can
-  catch.
+  catch. A [magnetic shear-release mount](design/explorations/mounting-magnetic.md) is
+  one **future-state** way to get this — the magnetic interface *is* the breakaway, and
+  anything bonded to a helmet is still **VHB tape only, never a drilled fastener**. The
+  hold force must be tuned to release below the snag/neck-load threshold; the new
+  failure mode to characterize is unintended detachment at speed (lost device / road
+  debris, not a rider-injury path).
 - **Battery safety.** LiPo on/near the head demands a **protected cell**, proper
   charge IC, over-current/over-discharge protection, and a sealed, vented enclosure.
   Don't charge unattended near the helmet's foam.
