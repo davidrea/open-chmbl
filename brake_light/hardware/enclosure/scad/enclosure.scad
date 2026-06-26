@@ -1,238 +1,212 @@
 // =============================================================================
-// Open-CHMBL — brake_light enclosure (parametric)
+// Open-CHMBL — brake_light enclosure (parametric, conformal CLAMSHELL)
 // =============================================================================
-// Strategy (see ../README.md):
-//   1. Pour a clear silicone LENS into a 3D-printed MOLD (lens_mold()).
-//   2. Set the PCB into the mold; after cure, the PCB + lens come out as one part.
-//   3. That assembly SLIDES into a 3D-printed extruded OUTER BODY (outer_body())
-//      and is closed with an END CAP (end_cap()).
-//   4. Magnets drop into pockets in the BOTTOM (helmet-facing) face, retained with
-//      VHB, sitting slightly RECESSED so the helmet steel pad keys into the recess
-//      (the "recess-the-magnets" plan of record — see ../README.md and
-//      docs/design/explorations/mounting-magnetic.md).
+// Two-piece clamshell, gently curved along its length to conform to a helmet
+// (or a pack/jacket panel). See ../README.md for the strategy and the sketch.
 //
-// Axis convention for every module here:
-//     X = width      (left/right across the bar)
-//     Y = height     (Y=0 is the bottom/helmet-facing face; lens emits at +Y top)
-//     Z = length     (the slide / extrusion axis)
+//   - INNER SHELL  (helmet-facing): curved tray that holds the PCB; recessed
+//                  magnet pockets in its outer (helmet) face.
+//   - OUTER SHELL  (lens side): perimeter frame that captures the overmolded
+//                  silicone LENS and shows it through a window. Doubles as the
+//                  pour mould for the lens (pour, set the PCB, cure).
+//   - PCB + LENS   are captured at the parting line when the shells close.
 //
-// All dimensions are millimetres. Everything is parametric: the PCB numbers are
-// PLACEHOLDERS until the real board exists — change the PCB block and the rest of
-// the geometry follows.
+// Radial stack, from the helmet outward (all on a common curvature centre):
+//     R0   helmet face (inner-shell outer surface)
+//     R1   = R0 + inner_shell_th
+//     ...  under_h component clearance
+//     PCB  (pcb_th)
+//     Rpart= parting line (LED face) — clamshell splits here
+//     LENS (lens_th)
+//     Rout = lens / outer surface
+//
+// Axis convention (curvature is in the X-Y plane; bend axis = Z = width):
+//     X = length   (the long, curved axis)
+//     Y = height   (radial; +Y is toward the helmet centre, device hangs at -Y)
+//     Z = width    (straight; not curved in this v1 — single-axis bend)
+//
+// Magnets are RECESSED into the helmet face — the plan of record from
+// docs/design/explorations/mounting-magnetic.md (see ../README.md §4).
+// All dimensions are millimetres. The PCB block is a PLACEHOLDER.
 // =============================================================================
+
+PI = 3.14159265358979;
 
 // ---- PCB (PLACEHOLDER — replace with the real board outline) -----------------
-pcb_len    = 70;    // Z, slide axis
-pcb_width  = 30;    // X
-pcb_th     = 1.6;   // Y
+pcb_len    = 70;    // along the curved length (arc length)
+pcb_width  = 30;    // Z
+pcb_th     = 1.6;   // radial
 
-// ---- Lens (poured silicone) --------------------------------------------------
-lens_base_h = 2.0;  // shoulder height (full PCB width) that sits UNDER the lips
-lens_neck_h = 4.0;  // emitting neck height that shows THROUGH the aperture
-lens_neck_w = 22;   // width of the emitting face (must be < pcb_width to be captured)
+// ---- Conformance -------------------------------------------------------------
+conform_R  = 150;   // inner (helmet) face radius. Helmet ~140-160; pack/jacket ~300+
+dev_margin = 6;     // shell length added beyond the PCB at each end (for closure)
+
+// ---- Shell / lens stack (radial thicknesses) ---------------------------------
+inner_min_wall = 2.4;  // helmet-face wall where there is no magnet
+under_h        = 2.0;   // clearance between inner shell and PCB top (components)
+lens_th        = 4.0;   // silicone lens between PCB LED face and outer surface
+frame_w        = 3.0;   // outer-shell perimeter frame width around the lens window
 
 // ---- Fit / clearances --------------------------------------------------------
-clr      = 0.4;     // general sliding clearance
-wall     = 2.4;     // outer side-wall thickness
-ledge    = 1.5;     // PCB support ledge width per side
-under_h  = 2.0;     // clearance under the PCB for bottom-side components
+clr        = 0.4;   // general clearance
+ledge      = 1.5;   // PCB-support ledge width per side (Z)
 
 // ---- Magnets (starting candidate from mounting-magnetic.md: N42 20x4 disc) ----
-magnet_d        = 20;    // disc diameter
-magnet_th       = 4;     // disc thickness
-vhb_th          = 0.8;   // VHB tape under the magnet, inside the pocket
-magnet_recess   = 1.2;   // how far the magnet face sits below the pocket rim
-magnet_back_min = 1.6;   // solid material left between pocket and inner channel
-magnet_count    = 2;     // discs along the length
-magnet_pitch    = 40;    // centre-to-centre along Z
+magnet_d        = 20;
+magnet_th       = 4;
+vhb_th          = 0.8;
+magnet_recess   = 1.2;
+magnet_back_min = 1.6;   // material left between pocket bottom and PCB cavity
+magnet_count    = 2;
+magnet_pitch_mm = 40;    // centre-to-centre arc length along the length
 
-// ---- Outer body / end cap ----------------------------------------------------
-back_wall    = 3.0;  // integrally-closed far end (acts as a slide stop)
-cap_th       = 3.0;  // end-cap flange thickness
-cap_plug_len = 6.0;  // how far the cap plug reaches into the channel
-screw_d      = 2.5;  // end-cap fastener clearance (M2.5 / self-tap), parametric
+// ---- Clamshell fasteners -----------------------------------------------------
+screw_d      = 2.5;  // radial fastener through both shells (M2.5 / self-tap)
+screw_inset  = 3.0;  // arc-length inset from each end for the fastener
+
+// ---- USB-C port (cut in one end wall) ----------------------------------------
+usb_w   = 9.5;
+usb_h   = 3.6;
+usb_end = 1;         // +1 = +X end, -1 = -X end
 
 // ---- Render quality ----------------------------------------------------------
-$fa = 2;
+$fa = 1.5;
 $fs = 0.4;
 eps = 0.05;
+arc_fn = 240;        // facets for the large curvature circles
 
-// ---- Derived -----------------------------------------------------------------
-inner_w    = pcb_width  + 2*clr;          // channel width at the PCB
-aperture_w = lens_neck_w + 2*clr;         // top opening width
-W          = inner_w + 2*wall;            // outer width
-// floor must be deep enough to bury a magnet + VHB + recess and leave a backing wall
-floor_t    = max(3.0, magnet_recess + magnet_th + vhb_th + magnet_back_min);
-pcb_bottom = floor_t + under_h;
-pcb_top    = pcb_bottom + pcb_th;
-lip_z      = pcb_top + lens_base_h;       // underside of the retention lips
-H          = lip_z + lens_neck_h;         // outer height (neck flush with top)
-under_void_w = inner_w - 2*ledge;         // narrower channel below the PCB (ledges)
+// ---- Derived radii -----------------------------------------------------------
+pocket_depth   = magnet_recess + magnet_th + vhb_th;
+pocket_d       = magnet_d + clr;
+// inner shell must be thick enough to bury a magnet + leave a backing wall
+inner_shell_th = max(inner_min_wall, pocket_depth + magnet_back_min);
 
-channel_len  = pcb_len + clr + cap_plug_len;  // open channel section
-body_len     = back_wall + channel_len;       // total extruded length
+R0     = conform_R;                       // helmet face
+R1     = R0 + inner_shell_th;             // inner-shell inner face
+Rpcb_lo= R1 + under_h;                    // PCB inner (component) face
+Rpart  = Rpcb_lo + pcb_th;                // parting line = PCB LED face
+Rout   = Rpart + lens_th;                 // lens / outer surface
 
-pocket_depth = magnet_recess + magnet_th + vhb_th;
-pocket_d     = magnet_d + clr;
+// ---- Derived widths / lengths ------------------------------------------------
+cav_w   = pcb_width + 2*clr;              // PCB cavity width
+ledge_w = cav_w - 2*ledge;               // narrower clearance below PCB -> ledges
+ap_w    = pcb_width - 2*frame_w;          // lens window width (Z)
+
+// half-angle (deg) for an arc length s measured at radius r
+function ang(s, r) = (s/2) / r * 180 / PI;
+
+dev_len    = pcb_len + 2*dev_margin;
+ha_dev     = ang(dev_len, Rpart);         // whole-shell half-angle
+ha_pcb     = ang(pcb_len, Rpcb_lo);       // PCB cavity half-angle
+ha_lens    = ang(pcb_len, Rpart);         // lens window half-angle (~ PCB length)
 
 // =============================================================================
-// 2D cross-sections (in the X=width / Y=height plane)
+// Primitives — curved (annular-sector) bands in the X-Y plane, extruded in Z
 // =============================================================================
 
-// The negative space the PCB + lens slide through. Open at the top (aperture) so
-// the lens neck emerges; the step from inner_w -> aperture_w forms the lips.
-module channel_void_2d() {
-    union() {
-        // clearance under the PCB (its narrower width forms the support ledges)
-        translate([-under_void_w/2, floor_t])
-            square([under_void_w, pcb_bottom - floor_t]);
-        // PCB + lens shoulder region
-        translate([-inner_w/2, pcb_bottom])
-            square([inner_w, lip_z - pcb_bottom]);
-        // aperture: open to the top
-        translate([-aperture_w/2, lip_z])
-            square([aperture_w, H - lip_z + eps]);
+// 2D radial sector between r_lo and r_hi, spanning +/- half_deg about -Y.
+module arc_sector_2d(r_lo, r_hi, half_deg) {
+    intersection() {
+        difference() { circle(r_hi, $fn = arc_fn); circle(r_lo, $fn = arc_fn); }
+        polygon([[0, 0],
+                 [ (r_hi + 2)*sin(half_deg), -(r_hi + 2)*cos(half_deg)],
+                 [-(r_hi + 2)*sin(half_deg), -(r_hi + 2)*cos(half_deg)]]);
     }
 }
 
-// Solid outer cross-section (used for the closed back wall).
-module outer_2d() {
-    translate([-W/2, 0]) square([W, H]);
+// 3D curved band: the sector given width w (centred in Z).
+module band(r_lo, r_hi, half_deg, w) {
+    translate([0, 0, -w/2]) linear_extrude(w) arc_sector_2d(r_lo, r_hi, half_deg);
 }
 
-// Body wall cross-section = outer minus the channel.
-module body_2d() {
-    difference() {
-        outer_2d();
-        channel_void_2d();
-    }
+// A radial cylinder (axis points from the curvature centre outward), located on
+// the arc at arc-length s from centre, reaching radii [r_lo, r_hi].
+module radial_cyl(s, dia, r_lo, r_hi, fn = 64) {
+    th = s / Rpart * 180 / PI;            // angle for this arc position
+    rotate([0, 0, th])
+        translate([0, -r_lo, 0])
+            rotate([90, 0, 0])            // +Z cylinder -> points -Y (outward)
+                cylinder(h = r_hi - r_lo, d = dia, $fn = fn);
 }
+
+// magnet arc positions (centre-to-centre along the length)
+function magnet_s(i) = (i - (magnet_count - 1)/2) * magnet_pitch_mm;
 
 // =============================================================================
-// Lens — the cured silicone part (reference / assembly only; not printed)
+// PCB + Lens (reference / assembly; not printed)
 // =============================================================================
-module lens() {
-    color("LightCyan", 0.45)
-    linear_extrude(pcb_len)
-        union() {
-            translate([-pcb_width/2, pcb_top])   square([pcb_width, lens_base_h]);
-            translate([-lens_neck_w/2, lip_z])   square([lens_neck_w, lens_neck_h]);
-        }
-}
-
-// PCB stand-in (reference / assembly only).
 module pcb() {
-    color("ForestGreen")
-    translate([-pcb_width/2, pcb_bottom, 0])
-        cube([pcb_width, pcb_th, pcb_len]);
+    color("ForestGreen") band(Rpcb_lo, Rpart, ha_pcb, pcb_width);
+}
+
+module lens() {
+    color("LightCyan", 0.45) band(Rpart, Rout, ha_lens, pcb_width);
 }
 
 // =============================================================================
-// Lens pour mold (3D-printed) — cavity is the lens, emitting face DOWN,
-// open at the top with a rebate that locates the PCB.
+// Inner shell (helmet side) — printed
 // =============================================================================
-mold_wall  = 3.0;
-mold_floor = 3.0;
-fit_pcb    = 0.3;   // PCB-to-rebate fit in the mold
-
-mold_W = pcb_width + fit_pcb + 2*mold_wall;
-mold_H = mold_floor + lens_neck_h + lens_base_h + pcb_th;
-mold_L = pcb_len + 2*mold_wall;
-
-// Inverted-lens cavity cross-section (neck down -> base -> PCB rebate, open top).
-module mold_cavity_2d() {
-    union() {
-        // neck (down at the cavity floor)
-        translate([-lens_neck_w/2, mold_floor])
-            square([lens_neck_w, lens_neck_h]);
-        // base shoulder
-        translate([-pcb_width/2, mold_floor + lens_neck_h])
-            square([pcb_width, lens_base_h]);
-        // PCB rebate, broken through the top surface for pour + insertion
-        translate([-(pcb_width + fit_pcb)/2, mold_floor + lens_neck_h + lens_base_h])
-            square([pcb_width + fit_pcb, pcb_th + eps]);
-    }
-}
-
-module lens_mold() {
-    color("Khaki")
-    difference() {
-        translate([-mold_W/2, 0, 0]) cube([mold_W, mold_H, mold_L]);
-        // cavity, inset from each Z end by mold_wall to leave end walls
-        translate([0, 0, mold_wall])
-            linear_extrude(mold_L - 2*mold_wall) mold_cavity_2d();
-        // pry slot at one end to release the cured part
-        translate([0, mold_H - 1.0, -eps])
-            rotate([-90, 0, 0]) cylinder(h = mold_wall + 2*eps, d = 6);
-    }
-}
-
-// =============================================================================
-// Outer body (3D-printed) — extruded channel, closed far end, magnet pockets.
-// =============================================================================
-module magnet_pockets() {
-    z0 = body_len/2 - magnet_pitch*(magnet_count - 1)/2;
-    for (i = [0 : magnet_count - 1]) {
-        translate([0, -eps, z0 + i*magnet_pitch])
-            rotate([-90, 0, 0])
-                cylinder(h = pocket_depth + eps, d = pocket_d, $fn = 64);
-    }
-}
-
-module outer_body() {
+module inner_shell() {
     color("DimGray")
     difference() {
-        union() {
-            // open channel section
-            linear_extrude(channel_len) body_2d();
-            // integrally-closed back wall (slide stop)
-            translate([0, 0, channel_len])
-                linear_extrude(back_wall) outer_2d();
-        }
-        magnet_pockets();
+        band(R0, Rpart, ha_dev, pcb_width + 2*frame_w);   // solid tray (full body)
+        // PCB cavity (slightly proud of parting so the PCB face is captured)
+        band(Rpcb_lo, Rpart + eps, ha_pcb, cav_w);
+        // component clearance below the PCB, narrower -> leaves support ledges
+        band(R1, Rpcb_lo, ha_pcb, ledge_w);
+        // recessed magnet pockets in the helmet face
+        for (i = [0 : magnet_count - 1])
+            radial_cyl(magnet_s(i), pocket_d, R0 - eps, R0 + pocket_depth);
+        clamshell_screws();
+        usb_cutout();
     }
 }
 
 // =============================================================================
-// End cap (3D-printed) — flange + plug that retains the lens/PCB and closes the
-// open end. Plug points in -Z so it mates at the body's +Z (open) end.
+// Outer shell (lens side) — printed; doubles as the lens pour mould
 // =============================================================================
-module cap_plug_2d() {
-    // the channel cross-section, shrunk by clearance so it slides in
-    offset(delta = -clr) channel_void_2d();
-}
-
-module end_cap() {
+module outer_shell() {
     color("SlateGray")
     difference() {
-        union() {
-            // flange (outside the body)
-            translate([-W/2, 0, 0]) cube([W, H, cap_th]);
-            // plug (reaches into the channel)
-            translate([0, 0, -cap_plug_len])
-                linear_extrude(cap_plug_len) cap_plug_2d();
-        }
-        // two fastener holes through the flange into the side-wall end-grain
-        for (sx = [-1, 1])
-            translate([sx*(W/2 - wall/2), H/2, -cap_plug_len - eps])
-                cylinder(h = cap_th + cap_plug_len + 2*eps, d = screw_d, $fn = 32);
+        band(Rpart, Rout, ha_dev, pcb_width + 2*frame_w); // perimeter frame body
+        // lens window (leaves a frame of frame_w around it)
+        band(Rpart - eps, Rout + eps, ha_lens, ap_w);
+        clamshell_screws();
+        usb_cutout();
     }
+}
+
+// =============================================================================
+// Shared cut features
+// =============================================================================
+module clamshell_screws() {
+    s_end = dev_len/2 - screw_inset;
+    for (sgn = [-1, 1])
+        radial_cyl(sgn * s_end, screw_d, R0 - 1, Rout + 1, 32);
+}
+
+// USB-C slot through the end wall, straddling the parting line.
+module usb_cutout() {
+    th = usb_end * ha_dev;
+    rotate([0, 0, th])
+        translate([0, -(Rpart), 0])
+            rotate([0, 90, 0])
+                translate([0, 0, -3])
+                    // slot centred on the parting radius, cut through the end wall
+                    linear_extrude(6)
+                        offset(1) square([usb_h, usb_w], center = true);
 }
 
 // =============================================================================
 // Assembly preview
 // =============================================================================
 module assembly() {
-    outer_body();
-    // lens + PCB inserted against the back wall
-    translate([0, 0, back_wall]) { pcb(); lens(); }
-    // end cap at the open end
-    translate([0, 0, body_len]) end_cap();
-    // magnets sitting in their pockets (reference)
-    z0 = body_len/2 - magnet_pitch*(magnet_count - 1)/2;
+    inner_shell();
+    pcb();
+    lens();
+    outer_shell();
+    // magnets seated (recessed) in their pockets
     for (i = [0 : magnet_count - 1])
         color("Silver")
-        translate([0, pocket_depth - magnet_th, z0 + i*magnet_pitch])
-            rotate([-90, 0, 0])
-                cylinder(h = magnet_th, d = magnet_d, $fn = 64);
+        radial_cyl(magnet_s(i), magnet_d, R0 + magnet_recess, R0 + magnet_recess + magnet_th);
 }

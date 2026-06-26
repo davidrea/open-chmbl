@@ -7,7 +7,7 @@ OPENSCAD ?= openscad
 SCAD := scad
 STL  := stl
 
-PARTS := outer_body end_cap lens_mold
+PARTS := inner_shell outer_shell
 
 all: $(PARTS:%=$(STL)/%.stl)
 

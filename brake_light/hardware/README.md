@@ -19,10 +19,10 @@ Key constraints:
 
 ## Enclosure
 
-Mechanical package is being modeled in [`enclosure/`](enclosure): a clear
-**poured-silicone lens** (cast in a 3D-printed mold, bonded to the PCB) that drops
-into a **3D-printed extruded outer body** with an **end cap**, mounted by **recessed
-magnets** (VHB-retained). Parametric OpenSCAD; see
+Mechanical package is being modeled in [`enclosure/`](enclosure): a **curved two-piece
+clamshell** that conforms to the helmet/pack, capturing the PCB and a clear
+**overmolded silicone lens** between an **inner shell** (helmet side, carries the
+**recessed magnets**) and an **outer shell** (lens window). Parametric OpenSCAD; see
 [`enclosure/README.md`](enclosure/README.md) for the strategy and the
 [anti-shear reconciliation](enclosure/README.md#4-magnet-mounting--anti-shear-reconciliation)
 with the [magnetic-mount plan of record](../../docs/design/explorations/mounting-magnetic.md).
