@@ -6,3 +6,10 @@
 
 # Smaller, quieter default log level for shipping firmware.
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# Route the console (REPL + logs) to the ESP32-C3 built-in USB Serial/JTAG
+# controller. It enumerates as a virtual COM port over the native USB pins
+# (GPIO18/GPIO19) — no external USB-TTL adapter — and exposes the JTAG debug
+# interface on the same cable at the same time. Boards wired for a UART console
+# can override this back to CONFIG_ESP_CONSOLE_UART_DEFAULT in menuconfig.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y

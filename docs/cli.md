@@ -112,10 +112,18 @@ Realizes [BL-CLI-1…5](feature-functions.md#bl-cli--developer-cli).
 
 ---
 
-## 5. Implementation notes (design, not yet built)
+## 5. Implementation notes
 
-- **Transport:** line-based over the USB-serial/UART console; tiny tokenizer + a
-  command registry table. No heap churn; fixed-size buffers.
+> **Status:** first cut landed on `brake_light` (DE-00 🟡). The REPL is up over the
+> ESP32-C3 USB Serial/JTAG console with `help`, `id` (chip unique ID / base MAC +
+> chip info), and `light [on|off|toggle]` (stand-in brake-light GPIO). The
+> source-override registry and the full domain commands below are still to come.
+
+- **Transport:** line-based over the console. On the ESP32-C3 the default is the
+  built-in **USB Serial/JTAG** controller — an enumerated virtual COM port over the
+  native USB pins that carries JTAG debugging on the same cable simultaneously, so
+  no external USB-TTL adapter is needed. UART remains a compile-time fallback. Built
+  on ESP-IDF's `esp_console` REPL (tokenizer + command registry); fixed-size buffers.
 - **Source registry:** a central table of overridable signals, each with
   `{ source, fake_value, live_getter }`, so `... set` / `... source` / `... show`
   are generic over signal name.
