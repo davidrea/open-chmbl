@@ -50,12 +50,17 @@ question.
    decides the whole architecture.
 3. **Correlate one signal at a time** (use PCAN-Explorer's trace + a symbol/`.sym`
    file as you identify fields):
-   - Squeeze the **brake lever / pedal** → which ID + bit toggles → `brake_switch`
-     (check front and rear separately).
+   - Squeeze the **brake lever / pedal** → look for a toggling bit. **On the reference
+     bike (Speed 400) repeated captures found none — there is no brake-switch signal on
+     the bus.** Confirm this for any new bike, but do not block on it: braking is
+     inferred from wheel-speed deceleration (see [firmware.md](firmware.md#braking-state-machine)).
    - Sweep the **throttle** (ride-by-wire, key on) → the byte that ramps 0→100 % →
-     `throttle_pct`.
-   - Blip the **engine** → the 16-bit, scaled `rpm` field.
-   - Pull the **clutch** → the `clutch_pulled` bit (may be absent on the 400 single).
+     `throttle_pct` (**confirmed present**).
+   - Pull the **clutch** → the `clutch_pulled` bit (**confirmed present**).
+   - Select **gears / neutral** (key on, on a stand) → the gear-position / neutral field
+     → `gear`/`neutral` (shown on the cluster, so expected on the bus).
+   - Blip the **engine** → the 16-bit, scaled `rpm` field (diagnostics only — the state
+     machine no longer needs it).
 4. **Record** each as `(can_id, bit offset, length, scale, offset)` and build it up as
    a PCAN-Explorer `.sym`/CANdb so the trace becomes human-readable.
 
@@ -67,21 +72,24 @@ to log **timestamped** frames during real riding.
 
 - **Configure the SocketCAN interface listen-only** (`ip link set canX type can
   bitrate <rate> listen-only on`) — the logger must never transmit on the bus.
-- Capture full rides: roll-ons, coast-downs, engine-braking, and gear changes.
-- **Wheel speed** is the prize here. With wheel speed + RPM you can:
-  - cluster `wheel_speed / rpm` into discrete **gears**,
-  - compute **true road deceleration** (`d(wheel_speed)/dt`) to calibrate the
-    `DECEL` thresholds against reality (RPM derivative alone is gear-dependent), and
-  - confirm `clutch_pulled` behaviour (RPM and wheel speed decouple when the clutch
-    is in).
+- Capture full rides: roll-ons, coast-downs, hard and gentle braking, stops, and gear
+  changes.
+- **Wheel speed is the headline signal** — the braking state machine is built on its
+  derivative. With wheel speed (plus gear/neutral) you can:
+  - compute **road deceleration** (`d(wheel_speed)/dt`, in MPH/s) — the input the
+    [FSM](firmware.md#braking-state-machine) thresholds against,
+  - tune the on/off acceleration thresholds and the smoothing window against real rides,
+    and
+  - confirm `clutch_pulled` / `gear` behaviour at stops and launches (the FSM's
+    stop-exit logic depends on them).
 - **Safety:** the logger is read-only and powered independently; mount it securely,
   start logging before riding, and never operate it while moving. Prefer a closed
   course / helper for the deliberate brake-and-coast runs.
 
 > Wheel-speed-derived deceleration comes from the **bike's own CAN data**, not an
 > on-board accelerometer/gyro, so it stays clear of the inertial-detection patent we
-> avoid. Treat it primarily as **calibration ground truth**; whether to also feed it
-> into the live `DECEL` logic is an open question (see [roadmap](roadmap.md)).
+> avoid — important now that it is the **primary** braking input, not just calibration
+> ground truth.
 
 ### Both rigs
 
@@ -110,18 +118,22 @@ typedef struct {
 typedef struct {
     const char  *name;          // e.g. "Triumph Speed 400 / Scrambler 400X (TR-series)"
     uint32_t     bitrate;       // 250000 / 500000
-    can_signal_t brake_switch;  // expect 1-bit
-    can_signal_t throttle_pct;  // 0..100 %
-    can_signal_t rpm;           // engine rpm
-    can_signal_t clutch_pulled; // 1-bit; .can_id = 0 if bike doesn't expose it
-    can_signal_t wheel_speed;   // optional; .can_id = 0 if unused. Calibration
-                                // ground truth; candidate input to a future DECEL.
+    can_signal_t wheel_speed;   // REQUIRED — primary braking input (decode to km/h or
+                                // mph; the FSM works in mph).
+    can_signal_t clutch_pulled; // 1-bit; gates the stop-exit logic.
+    can_signal_t gear;          // gear position; neutral encoded as gear 0 (or a
+                                // dedicated neutral bit). .can_id = 0 if unavailable.
+    can_signal_t throttle_pct;  // 0..100 %; diagnostics/telemetry.
+    can_signal_t rpm;           // engine rpm; diagnostics/telemetry.
+    // NOTE: no brake_switch — the reference bus does not publish one.
 } bike_profile_t;
 ```
 
 The decoder filters incoming frames to the profile's IDs and applies
-`value = raw * scale + offset` per signal. If `clutch_pulled.can_id == 0`, the state
-machine disables/contracts `DECEL` (see [firmware.md](firmware.md)).
+`value = raw * scale + offset` per signal. `wheel_speed` is mandatory; if `gear.can_id
+== 0` the FSM's neutral-aware stop exit degrades to the stop timeout only (see
+[firmware.md](firmware.md#braking-state-machine) and
+[DE-09](design/de-09-brake-decel-logic.md)).
 
 ---
 
@@ -152,27 +164,35 @@ Street Triple 765 uses the same red 6-pin connector located in the tail.
 > **free-running broadcast** CAN traffic (ECUs continuously chattering, which our
 > **listen-only** sniffer can read), or only **request/response** diagnostic data
 > (KWP2000/UDS — where live values appear *only* after a tester sends a request)?
-> Our passive, listen-only design depends on the former. If brake/throttle/RPM are
-> only available on request, that conflicts with the
+> Our passive, listen-only design depends on the former. If wheel speed / throttle /
+> clutch are only available on request, that conflicts with the
 > [listen-only golden rule](#1-golden-rule-listen-only) and forces a design rethink
 > (e.g. tapping an internal vehicle CAN where the ECUs broadcast among themselves,
 > rather than the diagnostic request/response channel). **Determine this before
 > anything else.**
 
+> ✅ **Resolved on the reference bike: there is no brake-switch signal on the bus.**
+> Repeated captures while working the brake found no toggling bit. The architecture
+> therefore infers braking from **wheel-speed deceleration** (see
+> [firmware.md](firmware.md#braking-state-machine)); `wheel_speed`, `clutch_pulled` and
+> `throttle_pct` are confirmed present, and `gear`/`neutral` is expected (it's on the
+> cluster). `wheel_speed` and `gear` still need their exact IDs/bit layouts captured.
+
 ### Decode table (to fill in during sniffing)
 
 | Signal | CAN ID | Bits (start/len) | Scale / offset | Notes |
 |--------|--------|------------------|----------------|-------|
-| `brake_switch` | _TBD_ | _TBD_ | 1-bit | Front and/or rear stop switch — find both if separate. |
-| `throttle_pct` | _TBD_ | _TBD_ | → 0–100 % | Ride-by-wire, so a throttle/APS position should be on the bus. |
-| `rpm` | _TBD_ | _TBD_ | → rpm | Expect 16-bit. |
-| `clutch_pulled` | _TBD_ | _TBD_ | 1-bit | The 400 single may **not** expose a clutch switch — if absent, `DECEL` is disabled/conservative (see [firmware.md](firmware.md)). |
-| `wheel_speed` | _TBD_ | _TBD_ | → km/h | **Ride-logger only** (Rig B) — only present in motion. Calibration ground truth + gear inference; optional live input. |
+| `wheel_speed` | _TBD_ | _TBD_ | → km/h (FSM uses mph) | **Required — primary braking input.** Shown on the cluster, so on the bus; present in motion. |
+| `clutch_pulled` | _TBD_ | _TBD_ | 1-bit | **Confirmed present.** Gates the stop-exit logic. |
+| `gear` / `neutral` | _TBD_ | _TBD_ | → gear (0 = N) | Shown on the cluster, so expected on the bus. Enables neutral-aware stop exit. |
+| `throttle_pct` | _TBD_ | _TBD_ | → 0–100 % | **Confirmed present.** Diagnostics/telemetry. |
+| `rpm` | _TBD_ | _TBD_ | → rpm | Diagnostics/telemetry; not used by the FSM. Expect 16-bit. |
+| `brake_switch` | — | — | — | **Not on the bus** — confirmed absent on the reference bike. |
 | Bus bit rate | — | — | — | Confirm 250 vs 500 kbit/s. |
 | Free-running vs. request/response | — | — | — | **Answer the risk above.** |
 
 Commit anonymized raw captures under `transmitter/software/captures/` (e.g.
-`speed400_brake_sweep.log`) so the decode can be re-derived and the Scrambler 400 X /
+`speed400_coastdown.log`) so the decode can be re-derived and the Scrambler 400 X /
 Street Triple can be compared against it.
 
 ### Why this is a good reference choice

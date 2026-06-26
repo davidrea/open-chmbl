@@ -4,10 +4,12 @@ In automotive engineering, the CHMBL is the "Center High-Mounted Brake Light" â€
 repository is an **"Open-sourCe Helmet Mounted Brake Light"** for motorcyclists.
 
 A battery-powered LED bar mounts on the back of the rider's helmet and lights up when
-the motorcycle is braking. Brake state is read from the bike's **CAN bus** (via the
-Euro 5 diagnostic port, **listen-only**) and sent wirelessly to the helmet over
-**ESP-NOW**. Reading throttle, RPM and clutch alongside the brake switch lets it tell
-**friction braking** from **engine braking** and **gear shifts**.
+the motorcycle is braking. The reference bike doesn't publish a brake-switch bit on its
+**CAN bus**, so braking is **inferred from wheel-speed deceleration** read off the bus
+(via the Euro 5 diagnostic port, **listen-only**) and sent wirelessly to the helmet over
+**ESP-NOW**. Clutch and gear/neutral context lets it hold the light through a stop and
+release it sensibly when the bike pulls away â€” deriving deceleration from the bike's own
+CAN wheel-speed (not an accelerometer) keeps it clear of the inertial-detection patents.
 
 Two units, both ESP32-based:
 
