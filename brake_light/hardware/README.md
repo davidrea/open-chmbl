@@ -17,6 +17,16 @@ Key constraints:
   is a future-state exploration.
 - Sealed, IP65+ enclosure.
 
+## Enclosure
+
+Mechanical package is being modeled in [`enclosure/`](enclosure): a clear
+**poured-silicone lens** (cast in a 3D-printed mold, bonded to the PCB) that drops
+into a **3D-printed extruded outer body** with an **end cap**, mounted by **recessed
+magnets** (VHB-retained). Parametric OpenSCAD; see
+[`enclosure/README.md`](enclosure/README.md) for the strategy and the
+[anti-shear reconciliation](enclosure/README.md#4-magnet-mounting--anti-shear-reconciliation)
+with the [magnetic-mount plan of record](../../docs/design/explorations/mounting-magnetic.md).
+
 ⚠️ Mounting + LiPo safety are mandatory reading: [`docs/safety-regulatory.md`](../../docs/safety-regulatory.md).
 
-_Schematics, BOM, enclosure, and mount files to be added (Phase 4)._
+_Schematics and BOM to be added (Phase 4)._

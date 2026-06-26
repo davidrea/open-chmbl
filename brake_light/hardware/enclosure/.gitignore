@@ -1,0 +1,5 @@
+# Rendered output — regenerate with `make`
+stl/
+*.stl
+*.3mf
+*.gcode

@@ -31,8 +31,8 @@ Lives at the diagnostic port. Powered from the bike. Read-only on CAN.
 | Power regulation | Automotive-grade **buck** (e.g. TPS54xx), 12 V→3.3 V | Must survive load dumps / 12–14.4 V charging system. Wide-Vin. |
 | Input protection | Reverse-polarity FET + **TVS diode** + fuse | Automotive transients are brutal. |
 | Ignition sense | Tap switched-12 V or detect bus activity | Used to sleep when bike is off (see parasitic draw). |
-| Connector | Bike-specific diagnostic plug | Euro 5 6-pin is common; **verify pinout per bike** — pin assignment is not universal. |
-| Enclosure | Potted/sealed, **IP65+** | Engine bay vibration + weather + heat. |
+| Connector | Bike-specific diagnostic plug → **wire-to-board (Molex SL, 4-pin)** | Euro 5 6-pin is common; **verify pinout per bike** — pin assignment is not universal. First prototypes reuse an off-the-shelf **Euro 5 → OBD2 adapter cable** with the 16-pin OBD2 end cut off and a 4-pin Molex SL header fitted (only 12 V / GND / CAN-H / CAN-L are populated on the reference bike). |
+| Enclosure | **Single PCB in heat-shrink**, taped under the seat | Under-seat location is benign but vibratory; dual-wall adhesive-lined heat-shrink + VHB tape is lighter, cheaper, and more serviceable than a potted box. See [`transmitter/hardware`](../transmitter/hardware/README.md#packaging--mounting-plan-of-record). Revisit potting only if a bike routes the unit somewhere weather-exposed. |
 
 ### Power & parasitic draw
 
@@ -77,7 +77,7 @@ sees and touches, so usability (charging, on/off, brightness) matters.
 | User I/O | One button | Power, pairing, brightness cycle. |
 | Status indicator | **Addressable RGB LED** (WS2812-class), **separate from the main bar** | Discrete status/fault by **color + blink code** (pairing, link, charge, fault) — legible even when the bar is off. Can reuse a **module's onboard WS2812** (see §2.1). See [`de-10`](design/de-10-status-indicator.md). |
 | Mount (baseline) | Non-penetrating, **breakaway** | Adhesive pad or strap; see safety doc. **Never drill the helmet.** Magnetic shear-release variants are a [future-state exploration](design/explorations/mounting-magnetic.md). |
-| Enclosure | **IP65+**, low-profile, lightweight | Mass on a helmet contributes to neck load in a crash — minimize it. |
+| Enclosure | **IP65+**, low-profile, lightweight | Mass on a helmet contributes to neck load in a crash — minimize it. Being modeled as a cast-silicone lens + 3D-printed extruded body + end cap with recessed magnets — see [`brake_light/hardware/enclosure`](../brake_light/hardware/enclosure/README.md). |
 
 ### Runtime budgeting (worked example)
 
