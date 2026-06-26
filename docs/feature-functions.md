@@ -30,20 +30,21 @@ brake_light (helmet-side).
 
 ### TX-DEC — Signal decode
 - TX-DEC-1 — Apply the active [bike profile](can-profiles.md) to raw frames.
-- TX-DEC-2 — Decode `brake_switch` (front and/or rear).
-- TX-DEC-3 — Decode `throttle_pct` (0–100 %).
-- TX-DEC-4 — Decode `rpm`.
-- TX-DEC-5 — Decode `clutch_pulled` when present (else mark unavailable).
-- TX-DEC-6 — Decode `wheel_speed` when present (optional).
+- TX-DEC-2 — Decode `wheel_speed` (**required** — the primary braking input) and convert to MPH.
+- TX-DEC-3 — Decode `clutch_pulled`.
+- TX-DEC-4 — Decode `gear`/`neutral` when present (else mark unavailable).
+- TX-DEC-5 — Decode `throttle_pct` (0–100 %) and `rpm` (diagnostics/telemetry).
+- TX-DEC-6 — Derive smoothed road **acceleration** (MPH/s) from `wheel_speed`.
 - TX-DEC-7 — Flag per-signal validity / staleness (frame not seen within timeout).
+- _(No `brake_switch` — confirmed absent from the reference bus.)_
 
 ### TX-SM — Braking state machine
-- TX-SM-1 — Debounce discrete inputs (brake, clutch).
-- TX-SM-2 — Compute `OFF` / `BRAKE` / `DECEL` per the [state machine](firmware.md#braking-state-machine).
-- TX-SM-3 — Suppress transitions during clutch-in (`SHIFT`).
+- TX-SM-1 — Consume smoothed acceleration, speed, clutch, and gear/neutral.
+- TX-SM-2 — Compute `OFF` / `BRAKING` / `STOPPED` per the [state machine](firmware.md#braking-state-machine), specified in an [SMC](https://smc.sourceforge.net/) `.sm` model.
+- TX-SM-3 — Hold the light through a standstill; release on move-away, launch (clutch released in gear), or the long-stop timeout.
 - TX-SM-4 — Enforce anti-strobe minimum dwell / hysteresis on all transitions.
-- TX-SM-5 — Gate `DECEL` behind a feature flag and clutch availability.
-- TX-SM-6 — Prioritize `BRAKE` above all other states.
+- TX-SM-5 — Use clutch + gear/neutral to gate the stop-exit logic (neutral-aware).
+- TX-SM-6 — Emit the result as `ST_BRAKE` (light on) / `ST_OFF` over the protocol.
 
 ### TX-NET — Wireless transmit (ESP-NOW)
 - TX-NET-1 — Pair once with a brake_light (store peer MAC + key in NVS).
@@ -59,11 +60,11 @@ brake_light (helmet-side).
 
 ### TX-CFG — Configuration & persistence
 - TX-CFG-1 — Select the active bike profile.
-- TX-CFG-2 — Hold feature flags (`enable_decel`, TX rate, etc.).
+- TX-CFG-2 — Hold the braking-FSM tunables and feature flags (TX rate, `has_gear_signal`, etc.).
 - TX-CFG-3 — Persist config + peer/keys across power cycles (NVS).
 
 ### TX-CLI — Developer CLI
-- TX-CLI-1 — Fake each decoded input signal (brake/throttle/rpm/clutch/wheel) — see [cli.md](cli.md).
+- TX-CLI-1 — Fake each decoded input signal (wheel/clutch/gear/throttle/rpm) — see [cli.md](cli.md).
 - TX-CLI-2 — View live decoded signals and their validity.
 - TX-CLI-3 — View / force the current state-machine output.
 - TX-CLI-4 — View CAN and ESP-NOW link statistics.
