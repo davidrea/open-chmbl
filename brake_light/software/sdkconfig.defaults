@@ -1,0 +1,8 @@
+# Default sdkconfig values applied on a fresh build (committed; the generated
+# `sdkconfig` is not). Override per-board with `idf.py menuconfig`.
+#
+# Target is selected at build time via `idf.py set-target esp32c3`
+# (or the `target` input of the CI action).
+
+# Smaller, quieter default log level for shipping firmware.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y

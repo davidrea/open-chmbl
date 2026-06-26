@@ -1,0 +1,37 @@
+name: Firmware build
+
+# Builds the ESP-IDF firmware with the real Espressif toolchain so we can
+# confirm it compiles. Add more firmware projects to the matrix as they land.
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "brake_light/software/**"
+      - ".github/workflows/firmware-build.yml"
+  pull_request:
+    paths:
+      - "brake_light/software/**"
+      - ".github/workflows/firmware-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: build ${{ matrix.name }} (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: brake_light
+            path: brake_light/software
+            target: esp32c3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build with ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: release-v5.3
+          target: ${{ matrix.target }}
+          path: ${{ matrix.path }}

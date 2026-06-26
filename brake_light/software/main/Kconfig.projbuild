@@ -1,0 +1,20 @@
+menu "Brake_light blink configuration"
+
+    config BLINK_GPIO
+        int "Blink LED GPIO number"
+        range 0 30
+        default 8
+        help
+            GPIO number (IOxx) driving the blink LED.
+
+            Default GPIO8 is the onboard LED on the Espressif ESP32-C3-DevKitM/C
+            reference boards. Set this to match the board you are bringing up.
+
+    config BLINK_PERIOD_MS
+        int "Blink period (ms)"
+        range 100 10000
+        default 1000
+        help
+            Full on+off period of the blink, in milliseconds.
+
+endmenu
