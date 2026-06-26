@@ -18,31 +18,36 @@ agreed approach so the eventual board design has a package to target.
 
 ## 1. Strategy
 
-A **clamshell** of two printed shells closing on a PCB + lens sandwich, curved along
-its length so the helmet-facing face conforms to the shell it mounts on:
+A **clamshell** of two printed shells closing on a flat PCB + lens sandwich. The
+**outer walls are curved** to conform to a helmet (or pack/jacket), but the **parting
+plane between the shells is FLAT** — because the shells clamshell onto either side of a
+flat, rigid PCB. We model the flat PCB first, then construct each shell as a curved
+outer wall clipped to that flat parting plane.
 
-1. **Outer shell (lens side, 3D-printed).** A perimeter frame with a window; it
+1. **PCB (flat, rigid).** Modelled explicitly ([`scad/pcb.scad`](scad/pcb.scad)) with a
+   representative USB-C, module, and LED bar. Its LED face defines the flat parting plane.
+2. **Outer shell (lens side, 3D-printed).** A perimeter frame with a window; it
    **doubles as the pour mould for the lens.** Pour clear silicone into the window
    cavity, then **set the PCB** onto the liquid silicone (LED side down). The silicone
    cures bonded to the board and captured in the frame — the lens is both the optic and
    the front gasket. (Alternative: pour in a separate reusable mould and drop the
    demoulded lens in — keeps the outer shell serviceable; costs a part.)
-2. **Inner shell (helmet side, 3D-printed).** A curved tray that seats the PCB on
-   support ledges and closes over the top. Its outer (helmet) face carries the
-   **recessed magnet pockets** ([§4](#4-magnet-mounting--anti-shear-reconciliation)).
-3. **Close the clamshell.** The two shells **capture the PCB and lens at the parting
-   line** (the PCB's LED face) and fasten together (radial M2.5 near each end,
-   parametric). USB-C exits through one end wall.
+3. **Inner shell (helmet side, 3D-printed).** Seats the PCB on support ledges and closes
+   over the top with a **flat inner (parting) face** and a **curved helmet face** that
+   carries the **recessed magnet pockets** ([§4](#4-magnet-mounting--anti-shear-reconciliation)).
+4. **Close the clamshell.** The two shells **capture the PCB and lens at the flat parting
+   plane** and fasten together (4× vertical M2.5 in the frame corners, parametric).
+   USB-C exits through one end.
 
 ```
-   side section (the long axis is curved to conform):
+   side section — OUTER WALLS curved, PARTING plane flat (chord through the rigid PCB):
 
-        ╭───────────────  inner shell (helmet side) ───────────────╮   ◀ concave face
-        │  ●  recessed magnet      ░░ PCB ░░       recessed magnet ●│      nests on helmet
-        ╞══════════════════ parting line (LED face) ════════════════╡   ◀ clamshell seam
+        ╭───────────────  inner shell (helmet side) ───────────────╮   ◀ curved helmet
+        │  ●  recessed magnet     ▢ components ▢    recessed magnet ●│      face conforms
+        ├════════════════ flat parting plane ═══ ░░ PCB ░░ ══════════┤   ◀ straight seam
         │ ▒▒▒▒▒▒▒▒▒  overmolded silicone lens (captured)  ▒▒▒▒▒▒▒▒▒ │
-        ╰──────────────────  outer shell (lens window)  ────────────╯   ◀ convex, emits
-   USB-C ╝  (one end)                                                       outward
+        ╰──────────────────  outer shell (lens window)  ────────────╯   ◀ curved lens
+   USB-C ╝  (one end)                                                       face, emits out
 ```
 
 ### Why this approach
@@ -50,6 +55,9 @@ its length so the helmet-facing face conforms to the shell it mounts on:
   and capture the PCB + lens cleanly at the seam — which a straight slide-in extrusion
   cannot. (We **backed out** the earlier extrusion + end-cap concept for exactly this:
   it was a constant straight profile and could not be curved.)
+- **Flat parting, curved walls.** Only the outer walls curve; the parting plane is flat
+  so the two shells clamp a flat, rigid PCB. This sidesteps the rigid-board-vs-curve
+  problem entirely — the board never has to bend.
 - **A cast silicone lens** gives an optically clear, shock-absorbing, weather-sealing
   front in one step, with no separate gasket — the lens *is* the seal at the window.
 - **3D-printed shells** mean **zero hard tooling** and fast iteration; the outer shell
@@ -78,6 +86,7 @@ enclosure/
     ├── enclosure.scad   ← the library: ALL parameters + every module
     ├── inner_shell.scad ← render target → inner (helmet) shell (printable)
     ├── outer_shell.scad ← render target → outer (lens) shell / pour mould (printable)
+    ├── pcb.scad         ← reference target → the flat PCB (defines the parting plane)
     └── assembly.scad    ← preview only: both shells + PCB + lens + magnets
 ```
 
@@ -88,6 +97,7 @@ Requires the OpenSCAD CLI (`openscad`). From this directory:
 ```sh
 make            # renders stl/inner_shell.stl and stl/outer_shell.stl
 make assembly   # renders stl/assembly.stl (preview, not for printing)
+make pcb        # renders stl/pcb.stl (reference flat PCB)
 make clean
 ```
 
@@ -98,12 +108,14 @@ regenerate it with `make`.
 
 Everything is driven from the top of [`scad/enclosure.scad`](scad/enclosure.scad).
 The **PCB block is a placeholder** (`pcb_len/pcb_width/pcb_th`). Axis convention (used
-by every module): **X = length (the curved axis), Y = height/radial (+Y toward the
-helmet centre), Z = width.** Curvature is a single-axis bend in the X-Y plane:
+by every module): **X = length, Y = height (+Y toward the curvature centre), Z = width.**
+The **outer walls** are single-axis arcs in the X-Y plane; the **parting plane is flat**
+at `y_part`:
 
-- **`conform_R`** — radius of the helmet-facing face. Default **150 mm** (helmet-ish;
-  ~140–160 mm). Set larger (~300 mm+) for a flatter pack/jacket panel. The shells are
-  concentric arcs about this radius, so the inner face nests flush on a matching shell.
+- **`conform_R`** — radius of the curved helmet face. Default **150 mm** (helmet-ish;
+  ~140–160 mm). Set larger (~300 mm+) for a flatter pack/jacket panel. Each shell is the
+  curved outer wall clipped to the flat parting plane, so the inner shell's helmet face
+  and the outer shell's lens face are arcs while their mating faces are flat.
 
 Notable dimensions are *derived*, not hand-entered — e.g. the inner shell thickness is
 derived so it always buries a magnet:
@@ -155,15 +167,16 @@ already covers (hold ≥ 30 N, release ≤ 80 N).
 
 ## 5. Open items
 
-- **Rigid PCB vs. curvature.** The model treats the PCB as following the arc, but a
-  rigid FR-4 board is **flat**. Over a 70 mm length at `conform_R = 150` the arc deviates
-  ~4 mm from a flat chord. Resolve by **(a)** a short/segmented board, **(b)** a
-  **rigid-flex or flexible PCB** that bends to the arc, or **(c)** keeping the board flat
-  and letting the inner cavity carry the gap (cavity becomes a flat pocket). Decide
-  before committing the board outline.
-- **Device thickness.** Burying a 20 × 4 mm magnet **under** the PCB drives the radial
-  stack to ~15 mm. Thin it by using a smaller/thinner magnet, placing magnets only at a
-  locally-thicker mid-section, or accepting the thickness. Track against the mass budget.
+- **Rigid PCB vs. curvature — resolved by the flat parting.** The board stays flat; only
+  the outer walls curve, so the rigid PCB never has to bend. Remaining nuance: the flat
+  board is a chord of the curved body, so the outer shell **pinches toward the ends** as
+  the lens face approaches the parting plane — keep the active PCB/lens length inside the
+  region where the outer shell still has depth (raise `conform_R` or shorten the board if
+  the ends get too thin).
+- **Device thickness.** Burying a 20 × 4 mm magnet **under** the PCB drives the stack to
+  ~16 mm at the centre (the curved ends rise to a ~21 mm overall envelope). Thin it with
+  a smaller/thinner magnet, magnets only at a locally-thicker section, or accept it.
+  Track against the mass budget.
 - **Single- vs. double-axis curvature.** v1 bends along the length only (cylindrical).
   A helmet is closer to spherical — add width-axis curvature if conformance needs it.
 - **Lens optics & material** — silicone shore hardness, clarity/diffusion, whether the
@@ -171,8 +184,8 @@ already covers (hold ≥ 30 N, release ≤ 80 N).
   (or accept the lens bonding into the outer shell if it doubles as the mould).
 - **Sealing target** — quantify the IP rating at the clamshell seam and the **USB-C**
   opening; decide on a seam gasket/bead vs. an interference fit.
-- **Clamshell fastening** — radial M2.5 holes are modeled; add matching bosses/heat-set
-  inserts, or switch to snaps/latches.
+- **Clamshell fastening** — vertical M2.5 holes through the frame corners are modeled;
+  add matching bosses/heat-set inserts, or switch to snaps/latches.
 - **Magnet spec & count** — `magnet_count`/`magnet_pitch_mm` and grade are placeholders;
   finalize against the bench force-window result.
 - **Mass budget** — helmet-mounted mass drives neck load

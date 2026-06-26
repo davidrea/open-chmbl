@@ -18,10 +18,14 @@ assembly: $(STL)/assembly.stl
 $(STL)/assembly.stl: $(SCAD)/assembly.scad $(SCAD)/enclosure.scad | $(STL)
 	$(OPENSCAD) -o $@ $<
 
+pcb: $(STL)/pcb.stl
+$(STL)/pcb.stl: $(SCAD)/pcb.scad $(SCAD)/enclosure.scad | $(STL)
+	$(OPENSCAD) -o $@ $<
+
 $(STL):
 	mkdir -p $(STL)
 
 clean:
 	rm -rf $(STL)
 
-.PHONY: all assembly clean
+.PHONY: all assembly pcb clean
