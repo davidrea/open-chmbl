@@ -60,7 +60,7 @@ testable in isolation; CAN-dependent elements last, after captures exist). Statu
 | **DE-01** | [ESP-NOW link](de-01-espnow-link.md) | both | TX-NET-*, BL-NET-* | DE-00 | 🔲 |
 | **DE-02** | [Auto-brightness](de-02-auto-brightness.md) | brake_light | BL-BRT-* | DE-00 | 🔲 |
 | **DE-03** | [Link-loss failsafe](de-03-link-loss-failsafe.md) | brake_light | BL-FS-* | DE-00, DE-01 | 🔲 |
-| **DE-04** | LED pattern/render engine | brake_light | BL-RND-*, BL-LED-* | DE-00 | 🔲 |
+| **DE-04** | [LED render & bar driver](de-04-led-render.md) | brake_light | BL-RND-*, BL-LED-* | DE-00 | 🟡 |
 | **DE-05** | Battery & charge management | brake_light | BL-PWR-* | DE-00 | 🔲 |
 | **DE-06** | TX power / sleep / wake | transmitter | TX-PWR-* | DE-00 | 🔲 |
 | **DE-07** | CAN capture & offline analysis | host (PCAN/Pi) | (enables TX-DEC) | — | 🔲 |
@@ -68,7 +68,7 @@ testable in isolation; CAN-dependent elements last, after captures exist). Statu
 | **DE-09** | [BRAKE/DECEL logic](de-09-brake-decel-logic.md) | transmitter | TX-SM-* | DE-00, DE-08 | 🔲 |
 | **DE-10** | [Status-indicator LED](de-10-status-indicator.md) | brake_light | BL-IND-* | DE-00 | 🔲 |
 
-DE-04…DE-06 don't have stub docs yet; they get one when scheduled. DE-07 is the
+DE-05…DE-06 don't have stub docs yet; they get one when scheduled. DE-07 is the
 bench/ride reverse-engineering captured in [`can-profiles.md`](../can-profiles.md).
 
 This table is the single source of truth for "what's the next isolated piece."
