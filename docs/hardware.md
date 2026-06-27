@@ -77,7 +77,7 @@ sees and touches, so usability (charging, on/off, brightness) matters.
 | User I/O | One button | Power, pairing, brightness cycle. |
 | Status indicator | **Addressable RGB LED** (WS2812-class), **separate from the main bar** | Discrete status/fault by **color + blink code** (pairing, link, charge, fault) — legible even when the bar is off. Can reuse a **module's onboard WS2812** (see §2.1). See [`de-10`](design/de-10-status-indicator.md). |
 | Mount (baseline) | Non-penetrating, **breakaway** | Adhesive pad or strap; see safety doc. **Never drill the helmet.** Magnetic shear-release variants are a [future-state exploration](design/explorations/mounting-magnetic.md). |
-| Enclosure | **IP65+**, low-profile, lightweight | Mass on a helmet contributes to neck load in a crash — minimize it. Being modeled as a curved two-piece clamshell (inner + outer shell) capturing the PCB and a cast-silicone lens, with recessed magnets — see [`brake_light/hardware/enclosure`](../brake_light/hardware/enclosure/README.md). |
+| Enclosure | **IP65+**, low-profile, lightweight | Mass on a helmet contributes to neck load in a crash — minimize it. Being modeled as a lenticular two-piece clamshell (doubly-curved caps, flat parting) capturing the PCB and a cast-silicone lens, with recessed magnets — see [`brake_light/hardware/enclosure`](../brake_light/hardware/enclosure/README.md). |
 
 ### Runtime budgeting (worked example)
 

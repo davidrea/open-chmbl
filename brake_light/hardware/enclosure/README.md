@@ -1,9 +1,10 @@
 # Brake_light — enclosure
 
-Mechanical package for the helmet-side brake light: a **two-piece, gently curved
-clamshell** that conforms to a helmet (or a pack/jacket panel), capturing the **PCB**
-and a clear **overmolded silicone lens** between an **inner shell** (helmet-facing,
-carries the magnets) and an **outer shell** (lens side).
+Mechanical package for the helmet-side brake light: a **two-piece lenticular
+clamshell** — a doubly-curved pod (two spherical caps bulging from a flat parting
+plane, tapering to a thin rim) that conforms to a helmet (or a pack/jacket panel),
+capturing the **PCB** and a clear **overmolded silicone lens** between an **inner
+shell** (helmet-facing, carries the magnets) and an **outer shell** (lens side).
 
 This directory holds the **strategy** (this file) and the **parametric OpenSCAD** model
 ([`scad/`](scad)). Nothing here is final — the PCB outline is a placeholder and every
@@ -18,11 +19,12 @@ agreed approach so the eventual board design has a package to target.
 
 ## 1. Strategy
 
-A **clamshell** of two printed shells closing on a flat PCB + lens sandwich. The
-**outer walls are curved** to conform to a helmet (or pack/jacket), but the **parting
-plane between the shells is FLAT** — because the shells clamshell onto either side of a
-flat, rigid PCB. We model the flat PCB first, then construct each shell as a curved
-outer wall clipped to that flat parting plane.
+A **lenticular clamshell** of two printed shells closing on a flat PCB + lens sandwich.
+The device is a **doubly-curved pod**: a spherical cap bulges up on the helmet side and
+down on the lens side, **both tapering to a thin rim** — curved in length *and* width.
+The **parting plane between the shells is FLAT**, because the shells clamshell onto
+either side of a flat, rigid PCB. We model the flat PCB first, then build each spherical
+cap from that flat parting plane.
 
 1. **PCB (flat, rigid).** Modelled explicitly ([`scad/pcb.scad`](scad/pcb.scad)) with a
    representative USB-C, module, and LED bar. Its LED face defines the flat parting plane.
@@ -40,14 +42,16 @@ outer wall clipped to that flat parting plane.
    USB-C exits through one end.
 
 ```
-   side section — OUTER WALLS curved, PARTING plane flat (chord through the rigid PCB):
+   side section — lenticular: spherical caps bulge from a FLAT parting plane and
+   taper to a thin rim (curved in length AND width):
 
-        ╭───────────────  inner shell (helmet side) ───────────────╮   ◀ curved helmet
-        │  ●  recessed magnet     ▢ components ▢    recessed magnet ●│      face conforms
-        ├════════════════ flat parting plane ═══ ░░ PCB ░░ ══════════┤   ◀ straight seam
-        │ ▒▒▒▒▒▒▒▒▒  overmolded silicone lens (captured)  ▒▒▒▒▒▒▒▒▒ │
-        ╰──────────────────  outer shell (lens window)  ────────────╯   ◀ curved lens
-   USB-C ╝  (one end)                                                       face, emits out
+            _____  inner shell (helmet side), convex cap  _____
+        ╱‾‾                                                     ‾‾╲   ◀ convex helmet
+       │  ●  recessed magnet   ▢ components ▢   recessed magnet ●  │      face
+        ├═════════════ flat parting plane ═══ ░░ PCB ░░ ═══════════┤   ◀ straight seam
+        ╲__   ▒▒▒▒  overmolded silicone lens (captured)  ▒▒▒▒   __╱   ◀ convex lens
+            ‾‾‾‾‾‾  outer shell (lens window), convex cap  ‾‾‾‾‾        face, emits out
+   USB-C ╝  (one end)
 ```
 
 ### Why this approach
@@ -58,6 +62,8 @@ outer wall clipped to that flat parting plane.
 - **Flat parting, curved walls.** Only the outer walls curve; the parting plane is flat
   so the two shells clamp a flat, rigid PCB. This sidesteps the rigid-board-vs-curve
   problem entirely — the board never has to bend.
+- **Lenticular & doubly curved.** Spherical caps curve in both length and width and
+  taper to a thin rim, matching the design sketch and giving a smooth, low-snag pod.
 - **A cast silicone lens** gives an optically clear, shock-absorbing, weather-sealing
   front in one step, with no separate gasket — the lens *is* the seal at the window.
 - **3D-printed shells** mean **zero hard tooling** and fast iteration; the outer shell
@@ -66,11 +72,11 @@ outer wall clipped to that flat parting plane.
 
 ---
 
-## 2. Architecture: curved clamshell (chosen)
+## 2. Architecture: lenticular clamshell (chosen)
 
 | Option | What it is | Verdict |
 |--------|-----------|---------|
-| **Curved clamshell (inner + outer shell)** *(chosen)* | Two shells closing on the PCB + lens, curved along the length to conform. | **Primary.** The only one of the two that conforms to a helmet/pack and captures the sandwich at a seam. Modeled here. |
+| **Lenticular clamshell (inner + outer shell)** *(chosen)* | Two shells closing on the PCB + lens; doubly-curved spherical caps from a flat parting, tapering to a thin rim. | **Primary.** Conforms to a helmet/pack in both axes and captures the sandwich at a flat seam. Modeled here. |
 | **Extrusion + end cap** *(backed out)* | Constant straight profile; lens + PCB slide in along a slot, closed by an end cap. | **Removed.** Prints easily but is inherently straight — cannot conform to a curved surface. Superseded by this clamshell. |
 
 ---
@@ -108,21 +114,27 @@ regenerate it with `make`.
 
 Everything is driven from the top of [`scad/enclosure.scad`](scad/enclosure.scad).
 The **PCB block is a placeholder** (`pcb_len/pcb_width/pcb_th`). Axis convention (used
-by every module): **X = length, Y = height (+Y toward the curvature centre), Z = width.**
-The **outer walls** are single-axis arcs in the X-Y plane; the **parting plane is flat**
-at `y_part`:
+by every module): **X = length, Z = width** (the parting-plane footprint), **Y = height**
+(+Y = helmet side, −Y = lens side). The **parting plane is flat at y = 0**; each outer
+face is a **spherical cap** through the footprint rim:
 
-- **`conform_R`** — radius of the curved helmet face. Default **150 mm** (helmet-ish;
-  ~140–160 mm). Set larger (~300 mm+) for a flatter pack/jacket panel. Each shell is the
-  curved outer wall clipped to the flat parting plane, so the inner shell's helmet face
-  and the outer shell's lens face are arcs while their mating faces are flat.
+- **`helmet_min_bulge` / `lens_bulge`** — the cap heights at the centre (helmet side /
+  lens side). Bigger bulge → tighter curvature. Each cap is the sphere through its apex
+  and the footprint half-diagonal `a`, so it tapers to the rim.
+- **`end_margin` / `side_margin` / `corner_r`** — the rounded-rectangle footprint around
+  the PCB (length, width, corner radius).
 
-Notable dimensions are *derived*, not hand-entered — e.g. the inner shell thickness is
-derived so it always buries a magnet:
+The cap radii are *derived* from the bulge + footprint; the helmet bulge is itself
+derived so the dome is always deep enough to bury a magnet above the PCB:
 
 ```
-inner_shell_th = max(inner_min_wall, pocket_depth + magnet_back_min)
+helmet_bulge = max(helmet_min_bulge, pocket_depth + pcb_th + under_h + magnet_back_min)
 ```
+
+> **Convex vs. concave helmet face.** The helmet cap is **convex** (lenticular, per the
+> sketch) and held to the helmet/pack by the magnets. A true **concave** cup that mates a
+> specific helmet radius is the natural alternative (invert the helmet cap to a sphere
+> centred above the parting); left as a parameter direction — say the word and it flips.
 
 Magnet defaults (`magnet_d = 20`, `magnet_th = 4`, N42) come from the starting bench
 candidate in the [magnetic-mount exploration](../../../docs/design/explorations/mounting-magnetic.md#starting-candidates-to-evaluate).
@@ -168,20 +180,25 @@ already covers (hold ≥ 30 N, release ≤ 80 N).
 ## 5. Open items
 
 - **Rigid PCB vs. curvature — resolved by the flat parting.** The board stays flat; only
-  the outer walls curve, so the rigid PCB never has to bend. Remaining nuance: the flat
-  board is a chord of the curved body, so the outer shell **pinches toward the ends** as
-  the lens face approaches the parting plane — keep the active PCB/lens length inside the
-  region where the outer shell still has depth (raise `conform_R` or shorten the board if
-  the ends get too thin).
-- **Device thickness.** Burying a 20 × 4 mm magnet **under** the PCB drives the stack to
-  ~16 mm at the centre (the curved ends rise to a ~21 mm overall envelope). Thin it with
-  a smaller/thinner magnet, magnets only at a locally-thicker section, or accept it.
-  Track against the mass budget.
-- **Single- vs. double-axis curvature.** v1 bends along the length only (cylindrical).
-  A helmet is closer to spherical — add width-axis curvature if conformance needs it.
+  the outer caps curve, so the rigid PCB never has to bend. Remaining nuance: the flat
+  board is a chord of the curved body, so the lens cap **pinches toward the rim** — keep
+  the active PCB/lens area inside the region where the lens cap still has depth (raise the
+  bulge/footprint, or shrink the board, if the edges get too thin).
+- **Convex vs. concave helmet face.** Helmet cap is currently **convex** (lenticular, per
+  the sketch), held by magnets. Flipping it to a **concave** cup that mates a chosen
+  helmet radius is the natural alternative — a one-parameter change (see §3).
+- **Device thickness.** Burying a 20 × 4 mm magnet **under** the PCB drives the centre
+  stack (and thus the helmet bulge) to ~13 mm; the pod is ~18 mm thick at the centre,
+  tapering to the rim. Thin it with a smaller/thinner magnet, magnets at a locally-thicker
+  spot, or relocating them outboard of the PCB. Track against the mass budget.
+- **Curvature is doubly-axial (spherical caps)** now — curves in length and width. A real
+  helmet is closer to spherical, so a single `conform`-style radius could replace the two
+  bulge params if a specific helmet fit is targeted.
 - **Lens optics & material** — silicone shore hardness, clarity/diffusion, whether the
   window needs a lens/diffuser profile; mould **draft + release agent** for demoulding
   (or accept the lens bonding into the outer shell if it doubles as the mould).
+- **Render cost** — the cap spheres use `sph_fn = 220`; lower it for faster iteration,
+  raise it for a smoother surface.
 - **Sealing target** — quantify the IP rating at the clamshell seam and the **USB-C**
   opening; decide on a seam gasket/bead vs. an interference fit.
 - **Clamshell fastening** — vertical M2.5 holes through the frame corners are modeled;
