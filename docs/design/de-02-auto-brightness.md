@@ -24,6 +24,9 @@ Ambient-light sensor (digital lux sensor over I²C, or analog photodiode + ADC) 
 ## 4. I/O assignments & configuration
 - Sensor bus/pin, sample rate (~5 Hz), lux range.
 - Brightness curve (lux → 0–100 %), day/night breakpoints, cap, smoothing time-constant.
+- **Physical endpoints** the 0–100 % maps onto come from the
+  [LED brightness benchmark §4](../led-brightness-benchmark.md#4-design-target-for-the-helmet-bar):
+  daylight peak ≈ **50–80 cd** on-axis (BRAKE) down to a night floor ≈ **5–15 cd**.
 
 ## 5. Firmware module/task decomposition
 - Ambient task (~5 Hz): read sensor → map → smooth → publish `commanded_brightness`.
@@ -39,4 +42,5 @@ Ambient-light sensor (digital lux sensor over I²C, or analog photodiode + ADC) 
 
 ## 8. Open items
 - Sensor choice and placement (must see ambient, not the bar's own glow).
-- Curve/breakpoint values — calibrate against real day/night readings.
+- Curve/breakpoint values — calibrate against real day/night readings, anchored to the
+  [benchmark](../led-brightness-benchmark.md) cd endpoints.

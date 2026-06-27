@@ -22,8 +22,9 @@ design and build **one at a time, in isolation**, exercised through the
 
 Cross-cutting design context already in progress lives one level up:
 [`hardware.md`](../hardware.md), [`firmware.md`](../firmware.md),
-[`protocol.md`](../protocol.md), [`can-profiles.md`](../can-profiles.md). Design
-elements here reference those rather than repeating them.
+[`protocol.md`](../protocol.md), [`can-profiles.md`](../can-profiles.md), and the
+[`led-brightness-benchmark.md`](../led-brightness-benchmark.md) sizing study (feeds DE-04
+and DE-02). Design elements here reference those rather than repeating them.
 
 ---
 
