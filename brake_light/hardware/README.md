@@ -19,11 +19,11 @@ Key constraints:
 
 ## Enclosure
 
-Mechanical package is being modeled in [`enclosure/`](enclosure): a **lenticular
-two-piece clamshell** (doubly-curved spherical caps from a flat parting plane) that
-conforms to the helmet/pack, capturing the PCB and a clear **overmolded silicone lens**
-between an **inner shell** (helmet side, carries the **recessed magnets**) and an
-**outer shell** (lens window). Parametric OpenSCAD; see
+Mechanical package is being modeled in [`enclosure/`](enclosure): a **two-piece
+clamshell** whose **inner shell is a concave dish** (the convex helmet rear nests into
+it — thin over the PCB, magnets outboard) and whose **outer shell is a convex lens cap**,
+split at a flat parting plane. Captures the PCB and a clear **overmolded silicone lens**;
+**recessed magnets** held by VHB. Parametric OpenSCAD; see
 [`enclosure/README.md`](enclosure/README.md) for the strategy and the
 [anti-shear reconciliation](enclosure/README.md#4-magnet-mounting--anti-shear-reconciliation)
 with the [magnetic-mount plan of record](../../docs/design/explorations/mounting-magnetic.md).
