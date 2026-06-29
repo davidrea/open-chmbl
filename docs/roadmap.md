@@ -36,24 +36,27 @@ ride-logger (SocketCAN, listen-only) for in-motion signals.
   or only responds to requests** — this gates the whole listen-only approach (see
   [can-profiles.md §5](can-profiles.md#5-reference-target--triumph-speed-400-tr-series-platform)).
 - Confirm the red 6-pin connector pinout + bus bit rate by probing.
-- Rig A: reverse-engineer `brake_switch`, `throttle_pct`, `rpm`, and `clutch_pulled`
-  (the 400 single may not expose a clutch switch). Build a `.dbc`/`.sym`.
-- Rig B: log full rides to capture **wheel speed**; correlate speed ↔ RPM ↔ throttle
-  ↔ clutch to derive gears and **true road deceleration** for `DECEL` calibration.
+- Rig A: reverse-engineer `wheel_speed`, `clutch_pulled`, `gear`/`neutral`, `throttle_pct`
+  and `rpm`. Build a `.dbc`/`.sym`. **There is no `brake_switch` on the reference bus**
+  (confirmed by capture) — braking is inferred from wheel-speed deceleration.
+- Rig B: log full rides to capture **wheel speed** in motion; use `d(wheel_speed)/dt` to
+  tune the [braking-FSM](can-profiles.md) acceleration thresholds and smoothing window,
+  and confirm `clutch`/`gear` behaviour at stops and launches.
 - Export the `bike_profile_t` from the `.dbc`; **validate the same profile on the
   Scrambler 400 X** (shared powertrain). Commit anonymized `.trc` / `candump` logs.
-- **Exit:** offline replay recovers all available signals; one profile works on both
-  400s; a labelled ride log exists for threshold tuning.
+- **Exit:** offline replay recovers all available signals + a sane derived acceleration;
+  one profile works on both 400s; a labelled ride log exists for threshold tuning.
 
 ## Phase 3 — End-to-end on the bench
 
-- Transmitter decodes live CAN (bike on a stand) → state machine → ESP-NOW → helmet
-  LED.
-- Calibrate the state-machine tunables (debounce, RPM-fall threshold, dwell times).
-- Verify `BRAKE` latency ≤ 100 ms; verify no strobing; verify `DECEL` gating by
-  clutch.
-- **Exit:** squeeze the brake → bright steady light within budget; roll off throttle
-  → `DECEL` (when enabled); shift → no flicker.
+- Transmitter decodes live CAN (bike on a stand / ride log replay) → state machine →
+  ESP-NOW → helmet LED.
+- Calibrate the FSM tunables (decel-on / accel-off thresholds, steady/stop timeouts,
+  acceleration smoothing window, anti-strobe dwell).
+- Verify light-on latency ≤ 100 ms; verify no strobing; verify the stop-hold and
+  neutral-aware release behave on real ride data.
+- **Exit:** a hard decel → bright steady light within budget; coast to a stop → light
+  holds through the standstill; accelerate away / launch → off; no flicker.
 
 ## Phase 4 — Hardware integration
 
@@ -75,9 +78,11 @@ ride-logger (SocketCAN, listen-only) for in-motion signals.
 | Topic | Question | Current lean |
 |-------|----------|--------------|
 | Reference bike | Which exact make/model/year? | **Triumph Speed 400** (+ Scrambler 400 X, shared powertrain); Street Triple 765 as a stretch. |
+| Brake signal source | Brake-switch bit on the bus, or inferred? | **Resolved — no brake bit on the reference bus.** Braking is inferred from wheel-speed deceleration (see [firmware.md](firmware.md#braking-state-machine) / [DE-09](design/de-09-brake-decel-logic.md)). |
 | CAN access mode | Free-running broadcast vs. request/response on the diag port? | **Unknown — Phase 2 gate.** Determines whether listen-only sniffing works at all. |
+| State-machine spec | How is the braking FSM authored? | **SMC `.sm` model**, compiled to C by a CMake pre-build step (requires a JRE on the build host). |
 | Street Triple support | Same profile or separate? | Separate profile (different platform), but same connector/TX hardware. |
-| Wheel speed in DECEL | Use bike wheel-speed for live deceleration, or calibration only? | Calibration ground truth first; revisit feeding it live once captured (stays clear of the inertial-sensing patent — it's CAN data, not an IMU). |
+| Wheel speed as primary input | Use bike wheel-speed for live deceleration? | **Yes — it is now the primary braking input** (no brake bit exists). Stays clear of the inertial-sensing patent — it's CAN data, not an IMU. |
 | Reverse-engineering tools | Bench + ride logging stack? | **Rig A:** PCAN-USB + PCAN-Explorer (listen-only). **Rig B:** Pi/Pi Zero + SocketCAN `candump`/`python-can`; analysis with `cantools`. |
 | LED array | Addressable (WS2812) vs. discrete red + CC driver? | **Discrete 620–630 nm red**, mid-power 2835/3030 array (~8–12 emitters) on a **boost CC driver (TI LM3410)**, sized to the CHMSL intensity band (~50–80 cd). Photometry/emitter in the [brightness benchmark](led-brightness-benchmark.md); series/boost topology + driver trade study in [DE-04](design/de-04-led-render.md). Addressable RGB too dim per-pixel → status indicator only. |
 | Status indicator | Separate status/fault LED (color + blink codes), independent of the bar? | **Yes** — add it (BL-IND / [DE-10](design/de-10-status-indicator.md)); ideally a module's onboard WS2812. |
@@ -85,7 +90,8 @@ ride-logger (SocketCAN, listen-only) for in-motion signals.
 | Mount | Adhesive/strap breakaway baseline vs. magnetic shear-release? | Baseline for now; [magnetic mount](design/explorations/mounting-magnetic.md) (helmet-interchangeable VHB steel targets and/or garment/backpack shoulder mount) is a future-state exploration. |
 | Shared code | Real `shared/` lib vs. duplicated headers across `transmitter/software` and `brake_light/software`? | Start duplicated/symlinked; promote to a lib (or PlatformIO `lib_deps`) once it stabilizes. |
 | Framework | ESP-IDF vs. Arduino-ESP32? | ESP-IDF for TWAI + ESP-NOW + deep-sleep control. |
-| `DECEL` feature | Ship the engine-braking courtesy cue at all? | Implement, **off by default** for legal reasons. |
+| Soft `DECEL` tier | Keep a separate softer "coasting" cue below the brake threshold? | Not for now — the light is binary on/off. `ST_DECEL` is **reserved** in the protocol if a second tier is wanted later. |
+| Stop-and-go flicker | How to handle repeated creep-and-stop in traffic? | Open — smoothing + anti-strobe dwell bound it; may add a `STOPPED`→`OFF` hold. See [DE-09 §8](design/de-09-brake-decel-logic.md#8-open-items). |
 | Charge IC | MCP73871 (load-share) vs. TP4056? | MCP73871 so the light works while charging. |
 | Battery monitor | Fuel-gauge IC vs. ADC divider? | TBD on cost/space. |
 | Telemetry | RX→TX battery/RSSI reporting? | Optional, diagnostics only; not core. |

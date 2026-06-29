@@ -12,6 +12,11 @@ exactly the **breakaway / frangible** behaviour the [safety doc](../../safety-re
 already requires of any mount. Instead of engineering a separate shear pin or
 breakaway adhesive, the mount *is* the release.
 
+A small but notable side-benefit of magnetic mounting: in the rare instance of a
+battery thermal runaway event, the brake light is _much_ easier to remove. Rather than
+having to remove the helmet (including chinstrap release, which usually requires
+removing gloves) or jacket entirely, the rider can brush the brake light off and away.
+
 Both explorations keep the project's hard rule intact: **never penetrate the helmet
 shell.** The only thing ever bonded to a helmet here is **VHB tape**, which is already
 the accepted non-penetrating method.
@@ -44,6 +49,8 @@ the shoulder blades on a jacket, or the upper panel of a backpack.
     peels off the magnets rather than dragging on the rider.
   - Mounting surface is large and roughly flat; easy to get a high, central, visible
     position.
+  - Easy **interchangeability** between garments/packs, or between clothing and
+    helmet.
 - **Trade-offs / open questions:**
   - **Lower and less stable than a helmet** — a shoulder/back panel pitches and shifts
     with the rider's torso and with wind buffeting; retention vs. clean release is a
@@ -170,6 +177,11 @@ shear release in a crash, we've also created a mount that the wind can release.
 
 **Peel is better for two reasons:**
 
+> To-Do: Move pocket from steel side to magnet side; i.e. magnets are recessed
+> slightly. Steel helmet landing pads fit into this recess, while fabric will be
+> crimped into the recesses in a garment/backpack attachment. Recessing the magnets
+> addresses shear in both cases, while retaining peel. 
+
 1. Wind applies a *lateral shear* force, which a shallow retention pocket resists
    independently of the magnets. A 2–3 mm pocket around the steel target means the
    device must lift **up** before it can slide sideways — converting a wind-shear
@@ -269,10 +281,11 @@ A spring-force gauge is all that's needed:
    lifts).
 4. **Peel pull:** apply force at the trailing edge to initiate peel — record the
    peak force. Target: 40–60 N. Repeat 20 cycles; release force should be consistent.
-5. **Wind simulation:** aim a fan at realistic angles; confirm no detachment at
-   highway-equivalent dynamic pressure.
+5. **Wind simulation:** aim a leaf blower at realistic angles; confirm no detachment at
+   approximately highway-equivalent wind speeds.
 6. **Temperature soak:** repeat after 30-minute oven soak at 70 °C (simulating sun-
-   heated surface) — confirm pull force does not drop more than 10–15 %.
+   heated surface) — confirm pull force does not drop more than 10–15 % and tape
+   maintains adhesion.
 
 ---
 

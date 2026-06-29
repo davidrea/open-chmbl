@@ -23,14 +23,20 @@ Two existing patent families constrain the obvious designs:
 - **Inertial detection** — using an accelerometer/gyro on the helmet or light to
   infer deceleration.
 
-Open-CHMBL deliberately avoids both. Instead it reads brake status (and related
-engine signals) from the **CAN bus exposed on the modern Euro 5 diagnostic port**.
-This is a data-only, read-only interface that does not modify any bike wiring.
+Open-CHMBL deliberately avoids both. Instead it reads vehicle data from the **CAN bus
+exposed on the modern Euro 5 diagnostic port** — a data-only, read-only interface that
+does not modify any bike wiring.
 
-Reading more than just the stop-lamp flag also lets us do something a simple tap
-cannot: distinguish **friction braking** (rider pulls the lever / presses the
-pedal) from **engine braking / deceleration** (throttle closed, bike slowing) and
-from **gear shifts** (clutch pulled). See [§4](#4-braking-state-machine).
+On the reference bike (Triumph Speed 400) the **brake-switch state is not published on
+the CAN bus** — repeated captures found no brake bit. The signals that *are* present and
+displayed on the instrument cluster — **wheel speed** and **gear/neutral** — plus the
+confirmed **throttle** and **clutch** signals are enough to do something a stop-lamp tap
+cannot: infer braking from **deceleration of the bike's own wheel-speed signal**, and
+distinguish steady cruise, accelerating away, and a hold at a standstill.
+
+Crucially, the deceleration estimate is derived from **CAN wheel-speed data, not an
+on-board accelerometer/gyro**, so it stays clear of the inertial-detection patent family
+above. See [§4](#4-braking-state-machine) for the resulting state machine.
 
 ---
 
@@ -74,10 +80,11 @@ protocol small and the failure modes easy to reason about.
 
 ## 3. Reference-bike-first strategy
 
-Brake status, throttle, RPM and clutch are **not** reliably available as standard
-OBD-II PIDs on motorcycles. They live in manufacturer-specific CAN frames whose IDs
-and bit layouts must be reverse-engineered per model. Trying to be universal on day
-one is the fastest way to ship nothing.
+Wheel speed, throttle, RPM, clutch and gear are **not** reliably available as standard
+OBD-II PIDs on motorcycles (and **brake-switch state may not be on the bus at all** — on
+the reference bike it isn't). The signals that exist live in manufacturer-specific CAN
+frames whose IDs and bit layouts must be reverse-engineered per model. Trying to be
+universal on day one is the fastest way to ship nothing.
 
 So: **pick one reference motorcycle, reverse-engineer it fully, prove the whole
 chain, then generalize.** The decoder is written against a small per-bike "profile"
@@ -103,43 +110,52 @@ for the connector details and decode table.
 
 ## 4. Braking state machine
 
-The TX fuses four input signals into one of a few discrete output states. Brightness
-and pattern for each state are decided on the RX.
+Because the reference bus has **no brake-switch bit**, the TX infers the light from
+**wheel-speed-derived acceleration**, qualified by clutch and gear/neutral context.
+Brightness and pattern for each state are decided on the RX.
 
 **Inputs (from CAN):**
-- `brake_switch` — front and/or rear stop-lamp switch (authoritative).
-- `throttle_pct` — throttle/APS position, 0–100 %.
-- `rpm` — engine speed.
-- `clutch_pulled` — clutch switch (disengaged), if the bike exposes it.
+- `wheel_speed` — cluster wheel/road speed; the primary input (converted to MPH).
+- `clutch_pulled` — clutch lever switch (confirmed present on the reference bus).
+- `gear` / `neutral` — gear position / neutral indicator (shown on the cluster).
+- `throttle_pct`, `rpm` — confirmed present; retained for diagnostics/telemetry, not
+  required by the state machine.
 
-**Output states:**
+**Derived:** `accel` — the slope of a smoothed `wheel_speed`, in MPH/s (− = decel). This
+is the core trigger.
 
-| State | Condition (sketch) | Meaning | Suggested render |
-|-------|--------------------|---------|------------------|
-| `OFF` | Throttle > ~3 % or steady cruise | Accelerating/holding | Light off (or dim running light) |
-| `BRAKE` | `brake_switch` active | Rider is braking | **Bright, solid red** (legally meaningful signal) |
-| `DECEL` | No brake switch **and** throttle ≈ 0 **and** `clutch_pulled` false **and** RPM falling faster than a threshold | Engine braking / coasting deceleration | Medium red (a "slowing" courtesy cue) |
-| `SHIFT` (suppress) | `clutch_pulled` true | Gear change — RPM/throttle are noisy | Hold previous non-brake state; do **not** flash |
+**Output states** (the light is effectively binary on/off; two on-states exist because
+their *off* conditions differ):
+
+| State | Condition (sketch) | Meaning | Render |
+|-------|--------------------|---------|--------|
+| `OFF` | Accelerating, steady cruise, or armed-but-idle | Not braking | Light off (or dim running light) |
+| `BRAKING` | Deceleration exceeds a threshold while moving | Bike is slowing | **Bright, solid red** |
+| `STOPPED` | At/near a standstill (held on) | Bike has stopped | **Bright, solid red** |
+
+`BRAKING` and `STOPPED` are both sent to the helmet as `BRAKE` (light on). The protocol
+keeps a `DECEL` value **reserved** for a possible future soft-cue tier.
 
 Design rationale:
 
-- **The brake switch is authoritative and primary.** It is the one signal with a
-  clear, legally-recognized meaning. `BRAKE` always wins over `DECEL`/`SHIFT`.
-- **`DECEL` is a soft, secondary cue.** RPM derivative is *not* a real road-deceleration
-  measurement (it's gear- and load-dependent), so we never try to estimate g-force
-  from it. We only use "throttle closed + RPM dropping + clutch out" as a coarse
-  "the bike is slowing under engine braking" hint. Whether `DECEL` is even legal to
-  display depends on jurisdiction — it is **off by default** (see config).
-- **Clutch gates `DECEL`.** During clutch-in (shifting, or pulling up to a stop) RPM
-  and throttle swing wildly; without gating, the light would flicker. If the bike
-  doesn't expose a clutch signal, `DECEL` should be disabled or made much more
-  conservative.
-- All inputs are **debounced** and the state machine uses **hysteresis / minimum
-  dwell times** so the light can't strobe. Flashing brake lights are illegal in many
-  places anyway — see safety doc.
+- **Deceleration is the signal.** With no stop-lamp flag, "the bike is slowing harder
+  than `DECEL_ON_MPHPS`" is the braking trigger. It comes from the bike's CAN
+  wheel-speed (not an IMU), keeping clear of the inertial-detection patent.
+- **Two thresholds, with hysteresis.** A larger deceleration turns the light *on*; a
+  positive acceleration (above a minimum speed) or a sustained steady speed turns it
+  *off*. Different on/off conditions prevent chatter around any single threshold.
+- **Stop handling.** Coasting below `STOP_SPEED_MPH` turns the light on (or keeps it on)
+  and *holds* it through a standstill — a stopped bike should read as braking to
+  following traffic. It releases when the bike pulls away, when the **clutch is released
+  in gear** (launching — this is where the gear/neutral signal earns its keep, since a
+  neutral stop must *not* be read as a launch), or after a long-stop timeout.
+- **Anti-strobe.** A global minimum-dwell floor gates all transitions so the light can't
+  strobe. Flashing brake lights are illegal in many places anyway — see safety doc.
 
 Full transition table, thresholds, and timing live in
-[`docs/firmware.md#braking-state-machine`](docs/firmware.md#braking-state-machine).
+[`docs/firmware.md#braking-state-machine`](docs/firmware.md#braking-state-machine); the
+rationale and the SMC model are in
+[`docs/design/de-09-brake-decel-logic.md`](docs/design/de-09-brake-decel-logic.md).
 
 ---
 

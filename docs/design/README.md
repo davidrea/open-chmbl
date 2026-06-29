@@ -66,7 +66,7 @@ testable in isolation; CAN-dependent elements last, after captures exist). Statu
 | **DE-06** | TX power / sleep / wake | transmitter | TX-PWR-* | DE-00 | 🔲 |
 | **DE-07** | CAN capture & offline analysis | host (PCAN/Pi) | (enables TX-DEC) | — | 🔲 |
 | **DE-08** | [Embedded CAN decode](de-08-can-decode.md) | transmitter | TX-CAN-*, TX-DEC-* | DE-00, DE-07 | 🔲 |
-| **DE-09** | [BRAKE/DECEL logic](de-09-brake-decel-logic.md) | transmitter | TX-SM-* | DE-00, DE-08 | 🔲 |
+| **DE-09** | [Braking state machine](de-09-brake-decel-logic.md) | transmitter | TX-SM-* | DE-00, DE-08 | 🔲 |
 | **DE-10** | [Status-indicator LED](de-10-status-indicator.md) | brake_light | BL-IND-* | DE-00 | 🔲 |
 
 DE-05…DE-06 don't have stub docs yet; they get one when scheduled. DE-07 is the
