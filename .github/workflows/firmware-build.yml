@@ -24,12 +24,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # esp32c3 is the product target; esp32 (classic) is interim dev
+          # hardware. Both firmwares are kept building on both so the tree stays
+          # portable (console transport etc. are selected by target defaults).
           - name: brake_light
             path: brake_light/software
             target: esp32c3
+          - name: brake_light
+            path: brake_light/software
+            target: esp32
           - name: transmitter
             path: transmitter/software
             target: esp32c3
+          - name: transmitter
+            path: transmitter/software
+            target: esp32
     steps:
       - name: Checkout
         uses: actions/checkout@v4

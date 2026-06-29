@@ -21,7 +21,9 @@ exists so each later element can be faked/observed in isolation on the bench.
 ```
 software/
 ├── CMakeLists.txt          top-level ESP-IDF project
-├── sdkconfig.defaults      committed defaults (console → USB Serial/JTAG)
+├── sdkconfig.defaults      committed defaults (common)
+├── sdkconfig.defaults.esp32c3   product target — USB Serial/JTAG console
+├── sdkconfig.defaults.esp32     interim dev hardware — UART console
 └── main/
     ├── CMakeLists.txt
     ├── Kconfig.projbuild    CHMBL_CLI / CHMBL_LIGHT_GPIO options
@@ -32,13 +34,26 @@ software/
     └── cmd_light.c         `light` — drive the stand-in brake-light GPIO
 ```
 
-### Console transport
+### Targets & console transport
 
-The console runs over the ESP32-C3's built-in **USB Serial/JTAG** controller: it
-enumerates as a virtual COM port over the native USB pins (GPIO18/GPIO19), so no
-external USB-TTL adapter is needed, and it carries the **JTAG debug interface on
-the same cable simultaneously**. Connect to the enumerated port (e.g.
-`/dev/ttyACM0`) at any baud — the rate is ignored for USB CDC.
+The firmware builds for two targets; pick one with `idf.py set-target`. The
+console code is identical — only the transport (chosen by the per-target
+`sdkconfig.defaults.<target>`) and the default light GPIO differ.
+
+| Target | Status | Console transport | Connect | JTAG on same cable |
+|--------|--------|-------------------|---------|--------------------|
+| `esp32c3` | product target | built-in **USB Serial/JTAG** (native USB GPIO18/19) | `/dev/ttyACM*`, any baud | yes |
+| `esp32` | interim dev hardware | **UART0** (GPIO1 TX / GPIO3 RX) via onboard USB-UART bridge | `/dev/ttyUSB*`, 115200 | no (needs external probe) |
+
+On the C3 the native USB port means no external USB-TTL adapter and console +
+debug over one cable. The classic ESP32 has no USB peripheral, so the shell goes
+out the TX/RX pins through the board's bridge chip.
+
+> **Portability:** ESP-IDF abstracts the drivers, so application code is shared.
+> The few genuine target divergences to keep in mind: don't pin tasks to core 1
+> (the C3 is single-core); deep-sleep wake config differs (Xtensa `ext0/ext1`
+> vs. RISC-V GPIO wake — relevant to TX power mgmt, DE-06); and pin numbers stay
+> in Kconfig since the usable GPIO maps differ.
 
 Commands so far (`help` lists them):
 
@@ -55,17 +70,17 @@ Requires [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c3
 
 ```bash
 cd brake_light/software
-idf.py set-target esp32c3
-idf.py menuconfig      # optional: set the stand-in light GPIO for your board
+idf.py set-target esp32      # or esp32c3 (re-run set-target to switch)
+idf.py menuconfig            # optional: set the stand-in light GPIO for your board
 idf.py build
-idf.py flash monitor   # on attached hardware (Ctrl-] to exit the monitor)
+idf.py flash monitor         # on attached hardware (Ctrl-] to exit the monitor)
 ```
 
-`idf.py monitor` attaches to the USB Serial/JTAG console; type `help` at the
-`chmbl>` prompt. The stand-in light pin defaults to **GPIO8** (onboard LED on
-the ESP32-C3-DevKitM/C). Change it under *Brake_light configuration → Stand-in
-brake-light GPIO number*, or override `CONFIG_CHMBL_LIGHT_GPIO` to match your
-board.
+`idf.py monitor` attaches to whichever console the target selected; type `help`
+at the `chmbl>` prompt. The stand-in light pin defaults to the onboard LED of
+each target's reference board (**GPIO2** on the classic ESP32-DevKitC, **GPIO8**
+on the ESP32-C3-DevKitM/C). Change it under *Brake_light configuration →
+Stand-in brake-light GPIO number*, or override `CONFIG_CHMBL_LIGHT_GPIO`.
 
 ## CI
 

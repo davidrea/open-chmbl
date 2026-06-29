@@ -1,15 +1,11 @@
 # Default sdkconfig values applied on a fresh build (committed; the generated
 # `sdkconfig` is not). Override per-board with `idf.py menuconfig`.
 #
-# Target is selected at build time via `idf.py set-target esp32c3`
-# (or the `target` input of the CI action).
+# Target-specific values live in sibling sdkconfig.defaults.<target> files that
+# IDF applies automatically on top of this one for the selected target:
+#   - sdkconfig.defaults.esp32c3   product target — USB Serial/JTAG console
+#   - sdkconfig.defaults.esp32     interim dev hardware — UART console
+# Pick the target with `idf.py set-target esp32c3` / `esp32` (or the CI matrix).
 
 # Smaller, quieter default log level for shipping firmware.
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
-
-# Route the console (REPL + logs) to the ESP32-C3 built-in USB Serial/JTAG
-# controller. It enumerates as a virtual COM port over the native USB pins
-# (GPIO18/GPIO19) — no external USB-TTL adapter — and exposes the JTAG debug
-# interface on the same cable at the same time. Boards wired for a UART console
-# can override this back to CONFIG_ESP_CONSOLE_UART_DEFAULT in menuconfig.
-CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
