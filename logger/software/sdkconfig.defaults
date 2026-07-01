@@ -8,6 +8,11 @@
 #     LVGL draw buffers and the CAN write buffering) ---
 CONFIG_SPIRAM=y
 
+# --- LCD controller: the ESP-WROVER-KIT ships with one of two panels and the
+#     BSP defaults to ILI9341. The v4.1 boards use the ST7789; the wrong choice
+#     drives the panel with the wrong init sequence (garbage / 1px stripes). ---
+CONFIG_BSP_LCD_ST7789=y
+
 # --- FAT filesystem: allow long filenames so the microSD's existing files list
 #     cleanly even though our own logs are short 8.3 names (N.trc) ---
 CONFIG_FATFS_LFN_STACK=y
