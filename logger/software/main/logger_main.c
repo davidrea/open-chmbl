@@ -352,7 +352,9 @@ static void can_init(void)
 
 void app_main(void)
 {
-    bsp_display_start();      /* LCD + LVGL up (backlight on) */
+    bsp_display_start();          /* LCD panel + LVGL up */
+    bsp_display_backlight_on();    /* the BSP inits the backlight but leaves it
+                                    * off — enable it or the panel stays dark */
     ui_log_init();
     ui_log_line("booted");
     ui_log_line("CAN %s %s", logger_bitrate_str(), logger_mode_str());
