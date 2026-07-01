@@ -4,8 +4,8 @@
 # Target is the ESP32 on the ESP-WROVER-KIT v4.1. Select it at build time with
 # `idf.py set-target esp32` (or the `target` input of the CI action).
 
-# --- PSRAM (the WROVER module carries 4 MB of it; frees internal RAM for the
-#     LVGL draw buffers and the CAN write buffering) ---
+# --- PSRAM (the WROVER module carries 4 MB of it; leaves internal RAM headroom
+#     for the CAN frame queue / write buffering) ---
 CONFIG_SPIRAM=y
 
 # --- FAT filesystem: allow long filenames so the microSD's existing files list

@@ -76,8 +76,8 @@ Raspberry Pi / SocketCAN + `candump` rig originally sketched here.)
 - **Listen-only by default** — the TWAI controller never ACKs or transmits (Kconfig
   can switch it to normal/ACK for a two-node bench). It must never transmit on the bus.
 - **Operation:** one pushbutton is start/stop — each start opens a new `N.trc`, each
-  stop closes it; the kit's LCD shows a running operations log. Set the bus **bit
-  rate** in `menuconfig` (default 500 kbit/s).
+  stop closes it; a running operations log goes to the serial console (`idf.py
+  monitor`). Set the bus **bit rate** in `menuconfig` (default 500 kbit/s).
 - Capture full rides: roll-ons, coast-downs, hard and gentle braking, stops, and gear
   changes.
 - **Wheel speed is the headline signal** — the braking state machine is built on its

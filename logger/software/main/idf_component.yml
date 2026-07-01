@@ -1,13 +1,9 @@
 ## Managed component dependencies for the logger app.
 ##
-## The esp_wrover_kit BSP is the one dependency we declare directly: it provides
-## the LCD (LVGL via esp_lvgl_port), the microSD mount helpers, and pulls in the
-## `button` (iot_button) component transitively. TWAI/FAT/SD drivers come from
-## ESP-IDF itself (see main/CMakeLists.txt PRIV_REQUIRES).
+## Just the debounced-button component; everything else (TWAI, FAT/SD, timers)
+## comes from ESP-IDF itself (see main/CMakeLists.txt PRIV_REQUIRES). The display
+## has been removed, so no BSP / LVGL / esp_lcd dependencies.
 dependencies:
   idf:
     version: ">=5.2"
-  espressif/esp_wrover_kit: "^2"
-  # The WROVER-KIT panel is an ILI9341; the BSP only drives ST7789, so we bring
-  # up the LCD ourselves (see main/display_init.c) with the real ILI9341 driver.
-  espressif/esp_lcd_ili9341: "^2"
+  espressif/button: "^4"

@@ -22,24 +22,25 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "driver/sdmmc_host.h"
 #include "driver/twai.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_vfs_fat.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "sdmmc_cmd.h"
 #include "sdkconfig.h"
 
-#include "bsp/esp_wrover_kit.h"
 #include "button_gpio.h"
 #include "iot_button.h"
 
-#include "display_init.h"
 #include "trc_format.h"
 #include "ui_log.h"
 
-#define TRC_DIR         BSP_SD_MOUNT_POINT
+#define TRC_DIR         "/sdcard"
 #define RX_QUEUE_LEN    CONFIG_LOGGER_RX_QUEUE_LEN
 #define CTRL_QUEUE_LEN  4
 
@@ -95,6 +96,27 @@ static const char *logger_mode_str(void)
 #else
     return "normal/ACK";
 #endif
+}
+
+/* ---- microSD -------------------------------------------------------------- */
+
+static sdmmc_card_t *s_card;
+
+/* Mount the microSD as FAT at TRC_DIR over the ESP32 SDMMC host (4-bit, the
+ * WROVER-KIT wiring — CLK14/CMD15/D0-3 = 2/4/12/13). Same config the ESP-IDF
+ * sd_card example uses on this board. Returns true on success. */
+static bool sd_mount(void)
+{
+    const esp_vfs_fat_sdmmc_mount_config_t mount_cfg = {
+        .format_if_mount_failed = false,
+        .max_files = 5,
+        .allocation_unit_size = 16 * 1024,
+    };
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();               /* SDMMC slot 1 */
+    sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT(); /* IO-MUX pins */
+    slot.width = 4;
+    slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+    return esp_vfs_fat_sdmmc_mount(TRC_DIR, &host, &slot, &mount_cfg, &s_card) == ESP_OK;
 }
 
 /* ---- microSD file bookkeeping -------------------------------------------- */
@@ -353,14 +375,10 @@ static void can_init(void)
 
 void app_main(void)
 {
-    logger_display_start();       /* ILI9341 LCD + LVGL up, backlight on
-                                    * (the BSP only drives ST7789 — see
-                                    * display_init.c) */
-    ui_log_init();
     ui_log_line("booted");
     ui_log_line("CAN %s %s", logger_bitrate_str(), logger_mode_str());
 
-    s_sd_ok = (bsp_sdcard_mount() == ESP_OK);
+    s_sd_ok = sd_mount();
     if (s_sd_ok) {
         unsigned highest = 0;
         int found = scan_existing_files(&highest);

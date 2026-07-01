@@ -64,6 +64,6 @@ menu "CAN logger configuration"
         help
             Depth of the queue buffering frames between the CAN receive task and
             the microSD writer task. Deeper tolerates longer SD write stalls at
-            the cost of RAM. Overflows are counted and shown on the display.
+            the cost of RAM. Overflows are counted and logged to the console.
 
 endmenu

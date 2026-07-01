@@ -12,15 +12,19 @@ Responsibilities:
   [`can-profiles.md §5`](../../docs/can-profiles.md#3-sniffing-methodology)).
 - **One pushbutton** start/stop: each **start** opens a new `N.trc` (N an increasing
   integer), each **stop** closes it. Debounced via the `iot_button` component.
-- Show a **running operations log** on the kit's LCD (booted, filesystem mounted,
-  files listed, next file number, opened file, button pressed, recording
-  started/stopped, file closed, drops).
+- Emit a **running operations log** to the serial console — view with `idf.py monitor`
+  (booted, filesystem mounted, files listed, next file number, opened file, button
+  pressed, recording started/stopped, file closed, drops).
+
+> The kit's LCD is **not used** — it's an ILI9341 the board BSP can't drive, so it was
+> removed. Status/feedback will move to the WROVER-KIT's onboard RGB LED (not yet
+> implemented); until then, use the serial console.
 
 ## Hardware / wiring
 
-The ESP-WROVER-KIT drives its LCD, microSD (SDMMC 4-bit), PSRAM and console over most
-of its GPIOs; the free pins carry the CAN signals and the button. An **external CAN
-transceiver** (e.g. SN65HVD230, 3.3 V) sits between the ESP and the bus.
+The ESP-WROVER-KIT uses most of its GPIOs for the microSD (SDMMC 4-bit), PSRAM and
+console (and the unused LCD); the free pins carry the CAN signals and the button. An
+**external CAN transceiver** (e.g. SN65HVD230, 3.3 V) sits between the ESP and the bus.
 
 | Signal | Default GPIO | Wiring |
 |--------|:------------:|--------|
@@ -64,21 +68,12 @@ software/
 ├── sdkconfig.defaults      committed defaults (generated sdkconfig is gitignored)
 └── main/
     ├── CMakeLists.txt
-    ├── idf_component.yml    esp_wrover_kit BSP (microSD + iot_button) + esp_lcd_ili9341
+    ├── idf_component.yml    espressif/button (iot_button); rest is ESP-IDF
     ├── Kconfig.projbuild    button / CAN pins, bit rate, listen-only, queue depth
     ├── trc_format.[ch]      pure PCAN .trc formatting (host-testable)
-    ├── ui_log.[ch]          on-screen rolling operations log (LVGL)
-    ├── display_init.[ch]    ILI9341 LCD + LVGL bring-up (see note below)
+    ├── ui_log.[ch]          operations log to the serial console
     └── logger_main.c        app_main: TWAI, microSD, button, RX + writer tasks
 ```
-
-> **Display driver note:** the WROVER-KIT v4.1 panel is an **ILI9341**, but the
-> `esp_wrover_kit` BSP only ships the ST7789 driver (its "ILI9341" menuconfig
-> option just flips colour order/mirror — it still calls `esp_lcd_new_panel_st7789`,
-> which leaves the panel showing garbage/vertical stripes). So `display_init.c`
-> brings the LCD up itself with the real `esp_lcd_ili9341` driver + `esp_lvgl_port`,
-> reusing the BSP's pin macros and backlight helpers; the BSP still owns the SD
-> card and button.
 
 `trc_format` is deliberately platform-independent (no IDF headers) so it can be
 host-unit-tested, per [`docs/firmware.md §4`](../../docs/firmware.md#4-build--toolchain).
@@ -93,11 +88,11 @@ cd logger/software
 idf.py set-target esp32
 idf.py menuconfig      # optional: CAN logger configuration (pins, bit rate, mode)
 idf.py build
-idf.py flash monitor   # on the attached ESP-WROVER-KIT
+idf.py flash monitor   # on the attached ESP-WROVER-KIT; monitor shows the op log
 ```
 
-The `espressif/esp_wrover_kit` BSP (and its LVGL / `iot_button` dependencies) is pulled
-automatically by the component manager on first build.
+The `espressif/button` component is pulled automatically by the component manager on
+first build.
 
 ## CI
 
