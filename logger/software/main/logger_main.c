@@ -38,8 +38,6 @@
 #include "trc_format.h"
 #include "ui_log.h"
 
-static const char *TAG = "logger";
-
 #define TRC_DIR         BSP_SD_MOUNT_POINT
 #define RX_QUEUE_LEN    CONFIG_LOGGER_RX_QUEUE_LEN
 #define CTRL_QUEUE_LEN  4
@@ -213,7 +211,7 @@ static void writer_stop_recording(void)
         s_file = NULL;
     }
     ui_log_line("recording stopped");
-    ui_log_line("file closed: %u frames%s", s_file_frames,
+    ui_log_line("file closed: %u frames%s", (unsigned)s_file_frames,
                 s_dropped ? " (drops!)" : "");
     if (s_dropped) {
         ui_log_line("  dropped %u frames", (unsigned)s_dropped);
