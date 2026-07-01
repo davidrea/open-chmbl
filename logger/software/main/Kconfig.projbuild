@@ -1,0 +1,69 @@
+menu "CAN logger configuration"
+
+    config LOGGER_BUTTON_GPIO
+        int "Start/stop pushbutton GPIO number"
+        range 0 39
+        default 33
+        help
+            GPIO wired to the momentary start/stop pushbutton (other side to GND).
+            The pin is driven with an internal pull-up and the button reads
+            active-low; debouncing is handled by the iot_button component.
+
+            Default GPIO33 is free on the ESP-WROVER-KIT v4.1 (the LCD, microSD,
+            PSRAM and console UART occupy the rest) and supports an internal
+            pull-up. GPIO32 is the obvious alternative.
+
+    config LOGGER_CAN_TX_GPIO
+        int "CAN (TWAI) TX GPIO number -> transceiver TXD"
+        range 0 33
+        default 26
+        help
+            GPIO routed to the TWAI transmit signal, wired to the external CAN
+            transceiver's TXD input. GPIO26 is free on the WROVER-KIT. Even in
+            listen-only mode the driver still claims this pin.
+
+    config LOGGER_CAN_RX_GPIO
+        int "CAN (TWAI) RX GPIO number <- transceiver RXD"
+        range 0 39
+        default 27
+        help
+            GPIO routed to the TWAI receive signal, wired from the external CAN
+            transceiver's RXD output. GPIO27 is free on the WROVER-KIT.
+
+    choice LOGGER_CAN_BITRATE
+        prompt "CAN bit rate"
+        default LOGGER_CAN_BITRATE_500K
+        help
+            Bit rate of the bus being logged. The reference Triumph bus is most
+            likely 500 kbit/s (see docs/can-profiles.md); 250 kbit/s is the other
+            common motorcycle rate.
+
+        config LOGGER_CAN_BITRATE_125K
+            bool "125 kbit/s"
+        config LOGGER_CAN_BITRATE_250K
+            bool "250 kbit/s"
+        config LOGGER_CAN_BITRATE_500K
+            bool "500 kbit/s"
+        config LOGGER_CAN_BITRATE_1M
+            bool "1 Mbit/s"
+    endchoice
+
+    config LOGGER_CAN_LISTEN_ONLY
+        bool "Listen-only (silent) mode"
+        default y
+        help
+            When enabled the TWAI controller runs in listen-only mode: it never
+            acknowledges or transmits, so it cannot disturb a live vehicle bus
+            (the project's golden rule). Disable only for a two-node bench where
+            the single peer needs an ACK to keep transmitting.
+
+    config LOGGER_RX_QUEUE_LEN
+        int "CAN RX-to-writer queue depth (frames)"
+        range 64 8192
+        default 1024
+        help
+            Depth of the queue buffering frames between the CAN receive task and
+            the microSD writer task. Deeper tolerates longer SD write stalls at
+            the cost of RAM. Overflows are counted and shown on the display.
+
+endmenu

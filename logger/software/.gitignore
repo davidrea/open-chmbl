@@ -1,0 +1,11 @@
+# ESP-IDF build output
+/build/
+
+# Generated, board-specific config (regenerated from sdkconfig.defaults).
+# Keep sdkconfig.defaults under version control, not sdkconfig.
+/sdkconfig
+/sdkconfig.old
+
+# Managed component cache (esp_wrover_kit BSP + its transitive deps)
+/managed_components/
+/dependencies.lock
