@@ -8,3 +8,6 @@ dependencies:
   idf:
     version: ">=5.2"
   espressif/esp_wrover_kit: "^2"
+  # The WROVER-KIT panel is an ILI9341; the BSP only drives ST7789, so we bring
+  # up the LCD ourselves (see main/display_init.c) with the real ILI9341 driver.
+  espressif/esp_lcd_ili9341: "^2"

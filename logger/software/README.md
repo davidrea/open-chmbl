@@ -64,12 +64,21 @@ software/
 ├── sdkconfig.defaults      committed defaults (generated sdkconfig is gitignored)
 └── main/
     ├── CMakeLists.txt
-    ├── idf_component.yml    espressif/esp_wrover_kit BSP (LVGL + microSD + iot_button)
+    ├── idf_component.yml    esp_wrover_kit BSP (microSD + iot_button) + esp_lcd_ili9341
     ├── Kconfig.projbuild    button / CAN pins, bit rate, listen-only, queue depth
     ├── trc_format.[ch]      pure PCAN .trc formatting (host-testable)
     ├── ui_log.[ch]          on-screen rolling operations log (LVGL)
+    ├── display_init.[ch]    ILI9341 LCD + LVGL bring-up (see note below)
     └── logger_main.c        app_main: TWAI, microSD, button, RX + writer tasks
 ```
+
+> **Display driver note:** the WROVER-KIT v4.1 panel is an **ILI9341**, but the
+> `esp_wrover_kit` BSP only ships the ST7789 driver (its "ILI9341" menuconfig
+> option just flips colour order/mirror — it still calls `esp_lcd_new_panel_st7789`,
+> which leaves the panel showing garbage/vertical stripes). So `display_init.c`
+> brings the LCD up itself with the real `esp_lcd_ili9341` driver + `esp_lvgl_port`,
+> reusing the BSP's pin macros and backlight helpers; the BSP still owns the SD
+> card and button.
 
 `trc_format` is deliberately platform-independent (no IDF headers) so it can be
 host-unit-tested, per [`docs/firmware.md §4`](../../docs/firmware.md#4-build--toolchain).

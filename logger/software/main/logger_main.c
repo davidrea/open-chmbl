@@ -35,6 +35,7 @@
 #include "button_gpio.h"
 #include "iot_button.h"
 
+#include "display_init.h"
 #include "trc_format.h"
 #include "ui_log.h"
 
@@ -352,9 +353,9 @@ static void can_init(void)
 
 void app_main(void)
 {
-    bsp_display_start();          /* LCD panel + LVGL up */
-    bsp_display_backlight_on();    /* the BSP inits the backlight but leaves it
-                                    * off — enable it or the panel stays dark */
+    logger_display_start();       /* ILI9341 LCD + LVGL up, backlight on
+                                    * (the BSP only drives ST7789 — see
+                                    * display_init.c) */
     ui_log_init();
     ui_log_line("booted");
     ui_log_line("CAN %s %s", logger_bitrate_str(), logger_mode_str());
