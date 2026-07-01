@@ -170,6 +170,17 @@ static void writer_start_recording(void)
     s_file_frames = 0;
     s_t0_us = INT64_MIN;
     s_dropped = 0;
+
+    /* Bring the CAN controller live only now, and flip the recording flag only
+     * after it is running so the RX task never calls twai_receive on a stopped
+     * controller. */
+    esp_err_t err = twai_start();
+    if (err != ESP_OK) {
+        ui_log_line("CAN start FAILED (%s)", esp_err_to_name(err));
+        fclose(s_file);
+        s_file = NULL;
+        return;
+    }
     s_recording = true;
     s_next_num++;
     ui_log_line("recording started");
@@ -197,8 +208,10 @@ static void writer_write_frame(const ts_frame_t *tf)
 
 static void writer_stop_recording(void)
 {
-    /* Stop accepting new frames, then flush any already queued for this file. */
+    /* Stop accepting new frames and take the CAN controller offline, then flush
+     * any frames already queued for this file. */
     s_recording = false;
+    twai_stop();
 
     ts_frame_t tf;
     while (xQueueReceive(s_frame_q, &tf, 0) == pdTRUE) {
@@ -252,12 +265,20 @@ static void can_rx_task(void *arg)
 {
     (void)arg;
     for (;;) {
-        twai_message_t msg;
-        if (twai_receive(&msg, portMAX_DELAY) != ESP_OK) {
+        /* The TWAI controller only runs while recording (see
+         * writer_start/stop_recording). When stopped, block cheaply so the idle
+         * task runs and the watchdog stays fed, and don't call twai_receive on a
+         * stopped controller. */
+        if (!s_recording) {
+            vTaskDelay(pdMS_TO_TICKS(20));
             continue;
         }
-        if (!s_recording) {
-            continue;   /* discard traffic while stopped */
+
+        /* Finite timeout: a silent-but-recording bus blocks here (letting the
+         * idle task run) and a stop stays responsive — never a tight spin. */
+        twai_message_t msg;
+        if (twai_receive(&msg, pdMS_TO_TICKS(100)) != ESP_OK) {
+            continue;   /* timeout, or the controller was just stopped */
         }
 
         ts_frame_t tf = {
@@ -321,8 +342,10 @@ static void can_init(void)
     twai_timing_config_t t = logger_timing();
     twai_filter_config_t f = TWAI_FILTER_CONFIG_ACCEPT_ALL();   /* no filtering */
 
+    /* Install the driver but leave the controller STOPPED. It is started only
+     * while recording (writer_start_recording) so a disconnected/floating RX
+     * pin can't flood the RX task at idle and starve the task watchdog. */
     ESP_ERROR_CHECK(twai_driver_install(&g, &t, &f));
-    ESP_ERROR_CHECK(twai_start());
 }
 
 /* ---- app_main ------------------------------------------------------------ */
