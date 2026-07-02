@@ -15,10 +15,26 @@ Responsibilities:
 - Emit a **running operations log** to the serial console — view with `idf.py monitor`
   (booted, filesystem mounted, files listed, next file number, opened file, button
   pressed, recording started/stopped, file closed, drops).
+- Show at-a-glance status on the onboard **red LED die** (GPIO0): slow heartbeat
+  blink when idle/ready, solid on while recording, fast blink on a fatal error
+  (microSD mount/file-open/CAN-start failure). See `status_led.[ch]`.
 
-> The kit's LCD is **not used** — it's an ILI9341 the board BSP can't drive, so it was
-> removed. Status/feedback will move to the WROVER-KIT's onboard RGB LED (not yet
-> implemented); until then, use the serial console.
+> The kit's LCD is **not used, and can't be**: its DC (data/command) signal is
+> hardwired to GPIO21, which the WROVER-KIT also routes to the microSD socket's
+> card-detect switch. Confirmed on hardware — a full ST7789/ILI9341 bring-up (no
+> LVGL/BSP, direct `esp_lcd` driver) worked correctly with the card removed, but
+> never updated at all with a card inserted, because the socket's CD contact
+> contends with the LCD's DC line the whole time a card is present. Since the SD
+> card is mission-critical (it's the entire point of this device) and DC has no
+> alternate pin to move to, the LCD is a dead end here.
+>
+> The onboard RGB LED's other two legs are also unusable: green (GPIO2) and blue
+> (GPIO4) are the microSD's D0/D1 data lines. Only the red die (GPIO0) is free —
+> it's also the boot-mode strapping pin, but that's sampled once, fresh, at each
+> reset before any of our code runs, so driving it as a normal GPIO output
+> afterward is safe (it's how Espressif's own board wires this exact LED). See
+> *Status LED* in `menuconfig` for the GPIO number and active-low polarity, in
+> case either needs adjusting for your board.
 
 ## Hardware / wiring
 
@@ -69,9 +85,10 @@ software/
 └── main/
     ├── CMakeLists.txt
     ├── idf_component.yml    espressif/button (iot_button); rest is ESP-IDF
-    ├── Kconfig.projbuild    button / CAN pins, bit rate, listen-only, queue depth
+    ├── Kconfig.projbuild    button / CAN pins, bit rate, listen-only, queue depth, status LED
     ├── trc_format.[ch]      pure PCAN .trc formatting (host-testable)
     ├── ui_log.[ch]          operations log to the serial console
+    ├── status_led.[ch]      idle/recording/error indicator on the onboard red LED
     └── logger_main.c        app_main: TWAI, microSD, button, RX + writer tasks
 ```
 

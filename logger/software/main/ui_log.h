@@ -1,9 +1,9 @@
 /*
  * Operations log to the serial console (view with `idf.py monitor`).
  *
- * Each ui_log_line() emits one line via ESP_LOGI. (This used to also render to
- * the kit's LCD; the display has been removed — status will move to the onboard
- * RGB LED later.) Callable from any task.
+ * Each ui_log_line() emits one line via ESP_LOGI. At-a-glance status (idle /
+ * recording / error) is separate -- see status_led.h for the onboard LED.
+ * Callable from any task.
  */
 #ifndef UI_LOG_H
 #define UI_LOG_H

@@ -67,3 +67,30 @@ menu "CAN logger configuration"
             the cost of RAM. Overflows are counted and logged to the console.
 
 endmenu
+
+menu "Status LED"
+
+    config LOGGER_STATUS_LED_GPIO
+        int "Status LED GPIO number"
+        range 0 39
+        default 0
+        help
+            GPIO driving the WROVER-KIT's onboard red LED die. GPIO0 is the
+            only leg of the board's RGB LED not shared with the microSD bus
+            (green=GPIO2/D0, blue=GPIO4/D1) or the LCD (also removed, for the
+            same reason -- see the top-level README). GPIO0 is also the
+            boot-mode strapping pin, but its strap value is sampled fresh at
+            each reset before any of our code runs, so driving it as a normal
+            output afterward is safe -- this is exactly how Espressif's own
+            board wires this LED (bsp_led_t: BSP_LED_RED = GPIO_NUM_0).
+
+    config LOGGER_STATUS_LED_ACTIVE_LOW
+        bool "LED is active-low"
+        default n
+        help
+            Off by default (GPIO high = LED on), matching Espressif's own
+            esp_wrover_kit BSP driver (bsp_led_set() writes the level
+            directly, no inversion). Toggle if the LED behaves backwards on
+            your board (lit while idle, dark while recording).
+
+endmenu

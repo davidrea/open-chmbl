@@ -4,7 +4,8 @@
  * Captures ALL CAN traffic (no filtering) in listen-only mode and writes it to
  * the on-board microSD as PCAN .trc (v2.1) ASCII files. A single debounced
  * pushbutton toggles recording: each start opens a new N.trc (N an increasing
- * integer), each stop closes it. The kit's LCD shows a running operations log.
+ * integer), each stop closes it. The onboard red LED (status_led.h) shows
+ * idle/recording/error at a glance; the full operations log goes to serial.
  *
  * This is the DE-07 "ride logger" — a self-contained ESP32 replacement for the
  * Raspberry Pi rig (see docs/can-profiles.md §3). Power-loss / card-removal
@@ -37,6 +38,7 @@
 #include "button_gpio.h"
 #include "iot_button.h"
 
+#include "status_led.h"
 #include "trc_format.h"
 #include "ui_log.h"
 
@@ -164,6 +166,7 @@ static void writer_start_recording(void)
 {
     if (!s_sd_ok) {
         ui_log_line("cannot record: no microSD");
+        status_led_set(LED_STATE_ERROR);
         return;
     }
 
@@ -179,6 +182,7 @@ static void writer_start_recording(void)
     s_file = fopen(path, "w");
     if (s_file == NULL) {
         ui_log_line("open FAILED: %u.trc", s_next_num);
+        status_led_set(LED_STATE_ERROR);
         return;
     }
 
@@ -200,6 +204,7 @@ static void writer_start_recording(void)
     esp_err_t err = twai_start();
     if (err != ESP_OK) {
         ui_log_line("CAN start FAILED (%s)", esp_err_to_name(err));
+        status_led_set(LED_STATE_ERROR);
         fclose(s_file);
         s_file = NULL;
         return;
@@ -207,6 +212,7 @@ static void writer_start_recording(void)
     s_recording = true;
     s_next_num++;
     ui_log_line("recording started");
+    status_led_set(LED_STATE_RECORDING);
 }
 
 /* Write one queued frame to the open file. */
@@ -247,6 +253,7 @@ static void writer_stop_recording(void)
         s_file = NULL;
     }
     ui_log_line("recording stopped");
+    status_led_set(LED_STATE_IDLE);
     ui_log_line("file closed: %u frames%s", (unsigned)s_file_frames,
                 s_dropped ? " (drops!)" : "");
     if (s_dropped) {
@@ -375,6 +382,8 @@ static void can_init(void)
 
 void app_main(void)
 {
+    status_led_init();
+
     ui_log_line("booted");
     ui_log_line("CAN %s %s", logger_bitrate_str(), logger_mode_str());
 
@@ -387,6 +396,7 @@ void app_main(void)
         ui_log_line("next file number = %u", s_next_num);
     } else {
         ui_log_line("microSD mount FAILED");
+        status_led_set(LED_STATE_ERROR);
     }
 
     s_frame_q = xQueueCreate(RX_QUEUE_LEN, sizeof(ts_frame_t));
