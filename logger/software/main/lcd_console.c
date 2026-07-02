@@ -1,6 +1,9 @@
 #include "lcd_console.h"
 
+#include "esp_log.h"
 #include "sdkconfig.h"
+
+static const char *TAG = "lcd";
 
 #if CONFIG_LOGGER_LCD_ENABLE
 
@@ -15,7 +18,6 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
-#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -25,8 +27,6 @@
 #endif
 
 #include "font8x8.h"
-
-static const char *TAG = "lcd";
 
 /* Native ST7789/ILI9341 panel geometry on the WROVER-KIT (portrait). */
 #define LCD_H_RES 240
@@ -160,6 +160,15 @@ static void lcd_console_redraw(void)
 
 void lcd_console_init(void)
 {
+    ESP_LOGI(TAG, "bring-up starting (pclk=%dMHz, controller=%s)",
+             CONFIG_LOGGER_LCD_PCLK_MHZ,
+#if CONFIG_LOGGER_LCD_CONTROLLER_ILI9341
+             "ili9341"
+#else
+             "st7789"
+#endif
+    );
+
     s_mutex = xSemaphoreCreateMutex();
 
     /* Backlight on first, independent of whether panel bring-up below
@@ -171,6 +180,7 @@ void lcd_console_init(void)
     };
     gpio_config(&bl_cfg);
     gpio_set_level(LCD_PIN_BL, 0);   /* active-low: 0 = backlight on */
+    ESP_LOGI(TAG, "backlight GPIO%d driven low (on)", LCD_PIN_BL);
 
     const spi_bus_config_t buscfg = {
         .sclk_io_num = LCD_PIN_CLK,
@@ -258,6 +268,8 @@ void lcd_console_write(const char *line)
 
 void lcd_console_init(void)
 {
+    ESP_LOGI(TAG, "LCD console disabled (CONFIG_LOGGER_LCD_ENABLE=n) -- check "
+                  "menuconfig's \"LCD status console\" menu if this is unexpected");
 }
 
 void lcd_console_write(const char *line)
