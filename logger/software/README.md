@@ -12,13 +12,22 @@ Responsibilities:
   [`can-profiles.md §5`](../../docs/can-profiles.md#3-sniffing-methodology)).
 - **One pushbutton** start/stop: each **start** opens a new `N.trc` (N an increasing
   integer), each **stop** closes it. Debounced via the `iot_button` component.
-- Emit a **running operations log** to the serial console — view with `idf.py monitor`
-  (booted, filesystem mounted, files listed, next file number, opened file, button
-  pressed, recording started/stopped, file closed, drops).
+- Emit a **running operations log** to the serial console (`idf.py monitor`) and to
+  a scrolling text console on the kit's **LCD** (booted, filesystem mounted, files
+  listed, next file number, opened file, button pressed, recording started/stopped,
+  file closed, drops).
 
-> The kit's LCD is **not used** — it's an ILI9341 the board BSP can't drive, so it was
-> removed. Status/feedback will move to the WROVER-KIT's onboard RGB LED (not yet
-> implemented); until then, use the serial console.
+> **LCD**: the only other onboard indicator is the WROVER-KIT's red/green/blue LED,
+> but two of its three legs (IO2/IO4) are shared with the microSD's 4-bit SDMMC bus,
+> leaving only the red channel usable — not enough for real status. The kit's LCD
+> is a v4.1-panel **ST7789V** (menuconfig-selectable to ILI9341 for older v3 kits);
+> the esp-bsp package's "ILI9341 vs ST7789" toggle turns out to only flip a mirror
+> flag and always drives ST7789 init commands, which produced a garbled screen in
+> an earlier attempt. `lcd_console.c` drives the panel directly with ESP-IDF's
+> built-in `esp_lcd` ST7789 driver (no LVGL, no BSP) and renders text with an
+> embedded 8x8 bitmap font — see *LCD status console* in `menuconfig` for the
+> controller choice, pixel clock, color-invert/BGR/mirror knobs, and the color-bar
+> self-test.
 
 ## Hardware / wiring
 
@@ -68,10 +77,12 @@ software/
 ├── sdkconfig.defaults      committed defaults (generated sdkconfig is gitignored)
 └── main/
     ├── CMakeLists.txt
-    ├── idf_component.yml    espressif/button (iot_button); rest is ESP-IDF
-    ├── Kconfig.projbuild    button / CAN pins, bit rate, listen-only, queue depth
+    ├── idf_component.yml    espressif/button (iot_button), esp_lcd_ili9341; rest is ESP-IDF
+    ├── Kconfig.projbuild    button / CAN pins, bit rate, listen-only, queue depth, LCD console
     ├── trc_format.[ch]      pure PCAN .trc formatting (host-testable)
-    ├── ui_log.[ch]          operations log to the serial console
+    ├── ui_log.[ch]          operations log to the serial console + LCD
+    ├── lcd_console.[ch]     ST7789/ILI9341 bring-up + scrolling text console (no LVGL/BSP)
+    ├── font8x8.[ch]         embedded public-domain 8x8 bitmap font
     └── logger_main.c        app_main: TWAI, microSD, button, RX + writer tasks
 ```
 

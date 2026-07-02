@@ -67,3 +67,70 @@ menu "CAN logger configuration"
             the cost of RAM. Overflows are counted and logged to the console.
 
 endmenu
+
+menu "LCD status console"
+
+    config LOGGER_LCD_ENABLE
+        bool "Enable the LCD status console"
+        default y
+        help
+            Mirror the operations log (ui_log_line messages) onto the
+            ESP-WROVER-KIT's onboard LCD in addition to the serial console.
+            Disable to run headless (serial log only).
+
+    if LOGGER_LCD_ENABLE
+
+    choice LOGGER_LCD_CONTROLLER
+        prompt "LCD panel controller"
+        default LOGGER_LCD_CONTROLLER_ST7789
+        help
+            ESP-WROVER-KIT v4.1 boards ship an ST7789V panel; older v3 boards
+            shipped an ILI9341. The wrong choice shows a blank or garbled
+            screen -- check the serial log's panel ID readback (RDDID/RDID4)
+            if unsure.
+
+        config LOGGER_LCD_CONTROLLER_ST7789
+            bool "ST7789 (WROVER-KIT v4.1)"
+        config LOGGER_LCD_CONTROLLER_ILI9341
+            bool "ILI9341 (WROVER-KIT v3 and earlier)"
+    endchoice
+
+    config LOGGER_LCD_PCLK_MHZ
+        int "LCD SPI pixel clock (MHz)"
+        range 1 40
+        default 20
+        help
+            Lower this (e.g. to 10) if the panel shows torn or striped output.
+
+    config LOGGER_LCD_INVERT_COLOR
+        bool "Invert panel colors"
+        default y
+        help
+            Most ST7789/ILI9341 panels on the WROVER-KIT need color inversion
+            for correct (non-negative) colors. Toggle if colors look wrong.
+
+    config LOGGER_LCD_BGR
+        bool "Panel wired BGR (vs RGB) element order"
+        default y
+        help
+            The WROVER-KIT's panel is wired BGR. Toggle if red/blue are
+            swapped on screen.
+
+    config LOGGER_LCD_MIRROR_X
+        bool "Mirror the panel on the X axis"
+        default y
+        help
+            Corrects the panel's native horizontal orientation. Toggle if
+            text appears mirrored/backwards.
+
+    config LOGGER_LCD_SELFTEST
+        bool "Run color-bar self-test at boot"
+        default y
+        help
+            Draw solid red/green/blue/white/black bars directly to the panel
+            for ~1s each before showing the log, to visually confirm the SPI
+            link and panel driver are working. Disable once bring-up is done.
+
+    endif
+
+endmenu

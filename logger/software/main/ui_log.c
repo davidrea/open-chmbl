@@ -5,6 +5,8 @@
 
 #include "esp_log.h"
 
+#include "lcd_console.h"
+
 static const char *TAG = "logger";
 
 void ui_log_line(const char *fmt, ...)
@@ -16,4 +18,5 @@ void ui_log_line(const char *fmt, ...)
     va_end(ap);
 
     ESP_LOGI(TAG, "%s", line);
+    lcd_console_write(line);
 }

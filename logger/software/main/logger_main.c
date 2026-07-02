@@ -37,6 +37,7 @@
 #include "button_gpio.h"
 #include "iot_button.h"
 
+#include "lcd_console.h"
 #include "trc_format.h"
 #include "ui_log.h"
 
@@ -375,6 +376,8 @@ static void can_init(void)
 
 void app_main(void)
 {
+    lcd_console_init();
+
     ui_log_line("booted");
     ui_log_line("CAN %s %s", logger_bitrate_str(), logger_mode_str());
 

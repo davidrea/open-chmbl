@@ -1,9 +1,13 @@
 ## Managed component dependencies for the logger app.
 ##
-## Just the debounced-button component; everything else (TWAI, FAT/SD, timers)
-## comes from ESP-IDF itself (see main/CMakeLists.txt PRIV_REQUIRES). The display
-## has been removed, so no BSP / LVGL / esp_lcd dependencies.
+## Just the debounced-button component, plus the ILI9341 panel driver for the
+## LCD's LOGGER_LCD_CONTROLLER_ILI9341 Kconfig choice (older WROVER-KIT v3
+## boards). Everything else the LCD needs (SPI, ST7789, the built-in esp_lcd
+## driver) comes from ESP-IDF itself, as do TWAI/FAT/SD/timers -- see
+## main/CMakeLists.txt PRIV_REQUIRES. No BSP or LVGL: lcd_console.c drives the
+## panel and renders text directly.
 dependencies:
   idf:
     version: ">=5.2"
   espressif/button: "^4"
+  espressif/esp_lcd_ili9341: "^2"
