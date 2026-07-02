@@ -28,6 +28,18 @@ Responsibilities:
 > embedded 8x8 bitmap font — see *LCD status console* in `menuconfig` for the
 > controller choice, pixel clock, color-invert/BGR/mirror knobs, and the color-bar
 > self-test.
+>
+> **Known conflict: LCD DC shares GPIO21 with the microSD card-detect switch.**
+> Confirmed on hardware: with a card inserted the panel never updates (stuck on
+> its power-on-reset color, RDDID/RDID4 readback zero); pull the card and the
+> console works. The microSD socket's card-detect contact grounds that net
+> whenever a card is present, contending with the LCD's DC signal — a PCB-level
+> conflict on the WROVER-KIT, not a driver bug, and the DC line is soldered
+> directly to GPIO21 (no free alternative pin to move it to). **This means the
+> LCD is not usable at the same time as a mounted microSD card** — i.e. not
+> during an actual logging run. Until/unless that's resolved in hardware, treat
+> the LCD console as a bench/bring-up aid (status visible before a card is
+> inserted, or with logging paused) rather than a live in-ride indicator.
 
 ## Hardware / wiring
 

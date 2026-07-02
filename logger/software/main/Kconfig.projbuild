@@ -104,10 +104,12 @@ menu "LCD status console"
 
     config LOGGER_LCD_INVERT_COLOR
         bool "Invert panel colors"
-        default y
+        default n
         help
-            Most ST7789/ILI9341 panels on the WROVER-KIT need color inversion
-            for correct (non-negative) colors. Toggle if colors look wrong.
+            Confirmed off (correct colors) on a WROVER-KIT v4.1's ST7789V
+            panel by hardware bring-up. Toggle if colors look inverted
+            (complementary: red<->cyan, green<->magenta, blue<->yellow,
+            black<->white) on your panel.
 
     config LOGGER_LCD_BGR
         bool "Panel wired BGR (vs RGB) element order"
