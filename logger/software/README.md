@@ -12,34 +12,23 @@ Responsibilities:
   [`can-profiles.md §5`](../../docs/can-profiles.md#3-sniffing-methodology)).
 - **One pushbutton** start/stop: each **start** opens a new `N.trc` (N an increasing
   integer), each **stop** closes it. Debounced via the `iot_button` component.
-- Emit a **running operations log** to the serial console (`idf.py monitor`) and to
-  a scrolling text console on the kit's **LCD** (booted, filesystem mounted, files
-  listed, next file number, opened file, button pressed, recording started/stopped,
-  file closed, drops).
+- Emit a **running operations log** to the serial console — view with `idf.py monitor`
+  (booted, filesystem mounted, files listed, next file number, opened file, button
+  pressed, recording started/stopped, file closed, drops).
 
-> **LCD**: the only other onboard indicator is the WROVER-KIT's red/green/blue LED,
-> but two of its three legs (IO2/IO4) are shared with the microSD's 4-bit SDMMC bus,
-> leaving only the red channel usable — not enough for real status. The kit's LCD
-> is a v4.1-panel **ST7789V** (menuconfig-selectable to ILI9341 for older v3 kits);
-> the esp-bsp package's "ILI9341 vs ST7789" toggle turns out to only flip a mirror
-> flag and always drives ST7789 init commands, which produced a garbled screen in
-> an earlier attempt. `lcd_console.c` drives the panel directly with ESP-IDF's
-> built-in `esp_lcd` ST7789 driver (no LVGL, no BSP) and renders text with an
-> embedded 8x8 bitmap font — see *LCD status console* in `menuconfig` for the
-> controller choice, pixel clock, color-invert/BGR/mirror knobs, and the color-bar
-> self-test.
->
-> **Known conflict: LCD DC shares GPIO21 with the microSD card-detect switch.**
-> Confirmed on hardware: with a card inserted the panel never updates (stuck on
-> its power-on-reset color, RDDID/RDID4 readback zero); pull the card and the
-> console works. The microSD socket's card-detect contact grounds that net
-> whenever a card is present, contending with the LCD's DC signal — a PCB-level
-> conflict on the WROVER-KIT, not a driver bug, and the DC line is soldered
-> directly to GPIO21 (no free alternative pin to move it to). **This means the
-> LCD is not usable at the same time as a mounted microSD card** — i.e. not
-> during an actual logging run. Until/unless that's resolved in hardware, treat
-> the LCD console as a bench/bring-up aid (status visible before a card is
-> inserted, or with logging paused) rather than a live in-ride indicator.
+> The kit's LCD is **not used, and can't be**: its DC (data/command) signal is
+> hardwired to GPIO21, which the WROVER-KIT also routes to the microSD socket's
+> card-detect switch. Confirmed on hardware — a full ST7789/ILI9341 bring-up (no
+> LVGL/BSP, direct `esp_lcd` driver) worked correctly with the card removed, but
+> never updated at all with a card inserted, because the socket's CD contact
+> contends with the LCD's DC line the whole time a card is present. Since the SD
+> card is mission-critical (it's the entire point of this device) and DC has no
+> alternate pin to move to, the LCD is a dead end here. Status/feedback will move
+> to the WROVER-KIT's onboard **red LED die** (GPIO0, `iot_button`/boot-strap pin
+> — safe to drive as an output post-boot since the strap is only sampled once,
+> fresh, at reset; not yet implemented). Green/blue are unusable for the same
+> reason as the LCD (GPIO2/GPIO4 are the SD data lines). Until the LED lands, use
+> the serial console.
 
 ## Hardware / wiring
 
@@ -89,12 +78,10 @@ software/
 ├── sdkconfig.defaults      committed defaults (generated sdkconfig is gitignored)
 └── main/
     ├── CMakeLists.txt
-    ├── idf_component.yml    espressif/button (iot_button), esp_lcd_ili9341; rest is ESP-IDF
-    ├── Kconfig.projbuild    button / CAN pins, bit rate, listen-only, queue depth, LCD console
+    ├── idf_component.yml    espressif/button (iot_button); rest is ESP-IDF
+    ├── Kconfig.projbuild    button / CAN pins, bit rate, listen-only, queue depth
     ├── trc_format.[ch]      pure PCAN .trc formatting (host-testable)
-    ├── ui_log.[ch]          operations log to the serial console + LCD
-    ├── lcd_console.[ch]     ST7789/ILI9341 bring-up + scrolling text console (no LVGL/BSP)
-    ├── font8x8.[ch]         embedded public-domain 8x8 bitmap font
+    ├── ui_log.[ch]          operations log to the serial console
     └── logger_main.c        app_main: TWAI, microSD, button, RX + writer tasks
 ```
 
