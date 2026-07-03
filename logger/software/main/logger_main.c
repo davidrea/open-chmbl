@@ -14,13 +14,15 @@
  * Tasks:
  *   CAN-RX  — twai_receive(); timestamps each frame and queues it (only while
  *             recording); counts drops if the queue is full.
- *   Writer  — owns the open file and the recording state; drains the frame queue
- *             and the button-command queue via a queue set, formats each frame
- *             and writes it, and opens/closes files on toggle.
+ *   Writer  — owns the open file and the recording state; services the
+ *             button-command queue first (so toggles act promptly), then drains
+ *             the frame queue, formats each frame and writes it, and opens/closes
+ *             files on toggle.
  */
 
 #include <dirent.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "driver/sdmmc_host.h"
@@ -46,6 +48,13 @@
 #define RX_QUEUE_LEN    CONFIG_LOGGER_RX_QUEUE_LEN
 #define CTRL_QUEUE_LEN  4
 
+/* Full-buffering size for the .trc stream. The default newlib buffer (~128 B)
+ * flushes an SD block write every few frames; at motorcycle bus loads (~1500
+ * frames/s here) those tiny writes cap the writer near ~400 frames/s and the
+ * RX-to-writer queue overflows. A large buffer batches writes into full SD
+ * clusters, lifting the ceiling far above the offered load. */
+#define TRC_IO_BUF_SIZE (32 * 1024)
+
 /* A CAN frame stamped with its receive time (esp_timer microseconds). */
 typedef struct {
     int64_t     t_us;
@@ -56,7 +65,6 @@ typedef enum { CMD_TOGGLE } logger_cmd_t;
 
 static QueueHandle_t    s_frame_q;
 static QueueHandle_t    s_ctrl_q;
-static QueueSetHandle_t s_queue_set;
 
 static volatile bool     s_recording;   /* read by CAN-RX, written by Writer */
 static volatile uint32_t s_dropped;     /* frames dropped on a full queue     */
@@ -158,6 +166,7 @@ static int scan_existing_files(unsigned *highest)
 /* ---- Writer task: owns the file + recording state ------------------------ */
 
 static FILE   *s_file;
+static char   *s_io_buf;      /* full-buffering block for s_file (see setvbuf) */
 static uint32_t s_msgnr;
 static int64_t  s_t0_us;      /* timestamp of the first frame in this file */
 static uint32_t s_file_frames;
@@ -186,6 +195,17 @@ static void writer_start_recording(void)
         return;
     }
 
+    /* Batch writes into full SD clusters (see TRC_IO_BUF_SIZE). Must be set
+     * before any I/O on the stream, and the buffer must outlive it (freed in
+     * writer_stop_recording). If the allocation fails, fall back to the default
+     * small buffer rather than aborting the recording. */
+    s_io_buf = malloc(TRC_IO_BUF_SIZE);
+    if (s_io_buf != NULL) {
+        setvbuf(s_file, s_io_buf, _IOFBF, TRC_IO_BUF_SIZE);
+    } else {
+        ui_log_line("warn: no I/O buffer, drops likely");
+    }
+
     char header[512];
     int hn = trc_format_header(header, sizeof(header));
     if (hn > 0) {
@@ -207,6 +227,8 @@ static void writer_start_recording(void)
         status_led_set(LED_STATE_ERROR);
         fclose(s_file);
         s_file = NULL;
+        free(s_io_buf);
+        s_io_buf = NULL;
         return;
     }
     s_recording = true;
@@ -248,9 +270,22 @@ static void writer_stop_recording(void)
     }
 
     if (s_file != NULL) {
+        /* Footer comment so every capture is self-documenting: readers skip
+         * lines starting with ';', and "dropped-frames: N" is greppable. A
+         * clean capture records 0, so absence of the line means an older/
+         * truncated file, not a lossless one. */
+        char footer[96];
+        int fn = snprintf(footer, sizeof(footer),
+                          ";dropped-frames: %u (RX-to-writer queue overflow)\n",
+                          (unsigned)s_dropped);
+        if (fn > 0) {
+            fwrite(footer, 1, (size_t)fn, s_file);
+        }
         fflush(s_file);
         fclose(s_file);
         s_file = NULL;
+        free(s_io_buf);
+        s_io_buf = NULL;
     }
     ui_log_line("recording stopped");
     status_led_set(LED_STATE_IDLE);
@@ -274,17 +309,27 @@ static void writer_task(void *arg)
 {
     (void)arg;
     for (;;) {
-        QueueSetMemberHandle_t member = xQueueSelectFromSet(s_queue_set, portMAX_DELAY);
-        if (member == s_ctrl_q) {
-            logger_cmd_t cmd;
-            if (xQueueReceive(s_ctrl_q, &cmd, 0) == pdTRUE && cmd == CMD_TOGGLE) {
+        /* Service the (rare) button command first so a toggle is always acted on
+         * promptly, even while frames are flooding in. Then block briefly on the
+         * frame queue: a silent-but-recording bus parks here (letting lower-prio
+         * tasks run) while a control press is still noticed within the timeout.
+         *
+         * NOTE: do not multiplex these two queues through a FreeRTOS queue set.
+         * writer_start/stop_recording drain s_frame_q directly, and reading a
+         * queue-set member outside xQueueSelectFromSet() desyncs the set's token
+         * accounting -- which stranded/batched button toggles under heavy frame
+         * load and left the status LED out of sync with the recording state. */
+        logger_cmd_t cmd;
+        if (xQueueReceive(s_ctrl_q, &cmd, 0) == pdTRUE) {
+            if (cmd == CMD_TOGGLE) {
                 writer_handle_toggle();
             }
-        } else if (member == s_frame_q) {
-            ts_frame_t tf;
-            if (xQueueReceive(s_frame_q, &tf, 0) == pdTRUE) {
-                writer_write_frame(&tf);
-            }
+            continue;
+        }
+
+        ts_frame_t tf;
+        if (xQueueReceive(s_frame_q, &tf, pdMS_TO_TICKS(20)) == pdTRUE) {
+            writer_write_frame(&tf);
         }
     }
 }
@@ -367,7 +412,11 @@ static void can_init(void)
 #endif
     twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(
         CONFIG_LOGGER_CAN_TX_GPIO, CONFIG_LOGGER_CAN_RX_GPIO, mode);
-    g.rx_queue_len = 32;   /* smooth ISR -> task hand-off at high bus load */
+    /* Deep enough to ride out a brief SD write stall without the driver
+     * dropping frames in the ISR (a loss path s_dropped can't see). ~128 frames
+     * is ~85 ms of slack at the ~1500 frames/s peaks seen on this bus, for a
+     * negligible ~2 KB of RAM. */
+    g.rx_queue_len = 128;
 
     twai_timing_config_t t = logger_timing();
     twai_filter_config_t f = TWAI_FILTER_CONFIG_ACCEPT_ALL();   /* no filtering */
@@ -401,9 +450,6 @@ void app_main(void)
 
     s_frame_q = xQueueCreate(RX_QUEUE_LEN, sizeof(ts_frame_t));
     s_ctrl_q  = xQueueCreate(CTRL_QUEUE_LEN, sizeof(logger_cmd_t));
-    s_queue_set = xQueueCreateSet(RX_QUEUE_LEN + CTRL_QUEUE_LEN);
-    ESP_ERROR_CHECK(xQueueAddToSet(s_frame_q, s_queue_set) == pdPASS ? ESP_OK : ESP_FAIL);
-    ESP_ERROR_CHECK(xQueueAddToSet(s_ctrl_q, s_queue_set) == pdPASS ? ESP_OK : ESP_FAIL);
 
     xTaskCreate(writer_task, "trc_writer", 4096, NULL, 5, NULL);
     xTaskCreate(can_rx_task, "can_rx", 4096, NULL, 6, NULL);
