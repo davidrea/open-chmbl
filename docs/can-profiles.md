@@ -180,22 +180,78 @@ Street Triple 765 uses the same red 6-pin connector located in the tail.
 > ✅ **Resolved on the reference bike: there is no brake-switch signal on the bus.**
 > Repeated captures while working the brake found no toggling bit. The architecture
 > therefore infers braking from **wheel-speed deceleration** (see
-> [firmware.md](firmware.md#braking-state-machine)); `wheel_speed`, `clutch_pulled` and
-> `throttle_pct` are confirmed present, and `gear`/`neutral` is expected (it's on the
-> cluster). `wheel_speed` and `gear` still need their exact IDs/bit layouts captured.
+> [firmware.md](firmware.md#braking-state-machine)); `wheel_speed`, `clutch_pulled`,
+> `throttle_pct`, `gear`/`neutral` and `rpm` have now all been captured and decoded from
+> a real ride — see the [decode table](#decode-table) below.
 
-### Decode table (to fill in during sniffing)
+### Decode table
 
-| Signal | CAN ID | Bits (start/len) | Scale / offset | Notes |
-|--------|--------|------------------|----------------|-------|
-| `wheel_speed` | _TBD_ | _TBD_ | → km/h (FSM uses mph) | **Required — primary braking input.** Shown on the cluster, so on the bus; present in motion. |
-| `clutch_pulled` | _TBD_ | _TBD_ | 1-bit | **Confirmed present.** Gates the stop-exit logic. |
-| `gear` / `neutral` | _TBD_ | _TBD_ | → gear (0 = N) | Shown on the cluster, so expected on the bus. Enables neutral-aware stop exit. |
-| `throttle_pct` | _TBD_ | _TBD_ | → 0–100 % | **Confirmed present.** Diagnostics/telemetry. |
-| `rpm` | _TBD_ | _TBD_ | → rpm | Diagnostics/telemetry; not used by the FSM. Expect 16-bit. |
+Byte offsets below are **0-based within the frame payload**; multi-byte fields are
+**big-endian** (B*n* is the high byte). Derived from the ride logger capture
+[`logger/40mph_drive_cycle.trc`](../logger/40mph_drive_cycle.trc) (a ~220 s Speed 400
+ride) cross-checked against the single-signal bench captures
+[`logger/throttle.trc`](../logger/throttle.trc) and
+[`logger/wheel.trc`](../logger/wheel.trc). See
+[Decode notes](#decode-notes-speed-400-reference-capture) below for how each was
+confirmed; the decoded overlay is
+[`logger/40mph_drive_cycle_decoded.png`](../logger/40mph_drive_cycle_decoded.png).
+
+| Signal | CAN ID | Bytes / bits | Scale / offset | Notes |
+|--------|--------|--------------|----------------|-------|
+| `wheel_speed` (front) | `0x102` | B1–B2, BE (16-bit) | `raw / 16` → km/h | **Required — primary braking input.** Only field active in `wheel.trc`. |
+| `wheel_speed` (rear) | `0x102` | B3–B4, BE (16-bit) | `raw / 16` → km/h | Second near-identical field; tracks front. |
+| `clutch_pulled` | `0x142` | B5 (low nibble ≠ 0) | `0x8D` = pulled, `0x80` = released | **Confirmed present.** Pulses around every gear change. |
+| `gear` / `neutral` | `0x142` | B3, low nibble | `0` = N, `1`–`4` = gear | Neutral at engine start/stop, as expected. Mirrored as `gear × 2` in `0x25D` B0. |
+| `throttle_pct` | `0x140` | B0 | `raw / 2.55` → 0–100 % | **Confirmed present.** Full 0–255 sweep in `throttle.trc`; ~2.5 % at idle (ride-by-wire idle air). |
+| `rpm` (live, coarse) | `0x140` | B6 | `raw × ~31.4` → rpm | Tracks true engine speed incl. cranking; **`0` = engine off**. Best on/off indicator. |
+| `rpm` (ECU filtered) | `0x146` | B2–B3, BE (16-bit) | `raw × 0.25` → rpm | Smooth; idle 1410, max 4559. Freezes at setpoint when stationary and holds ~1300 after kill — ECU target, not raw crank speed. |
+| `side_stand` | `0x481` | B7, bit 0 | `1` = stand up, `0` = down | Flips up shortly after ride starts; `0` in all bench captures (bike on stand). |
+| `engine_cutoff` (kill switch) | `0x121` | B3 bit 6 **and** B6 = `0x28` | asserted = kill | Asserts ~30 ms before live rpm decays to 0; never appears in a capture without a kill. |
 | `brake_switch` | — | — | — | **Not on the bus** — confirmed absent on the reference bike. |
-| Bus bit rate | — | — | — | Confirm 250 vs 500 kbit/s. |
-| Free-running vs. request/response | — | — | — | **Answer the risk above.** |
+| Bus bit rate | 500 kbit/s | — | — | Logger default; frames decode cleanly. Confirm by probing on new bikes. |
+| Free-running vs. request/response | **free-running broadcast** | — | — | Listen-only logger captured continuous traffic — the risk above is resolved for the reference bike. |
+
+> ⚠️ These IDs/scales are **empirically reverse-engineered** from a single reference
+> bike, not from Triumph documentation. `wheel_speed` scale (`/16` → km/h) and the two
+> `rpm` scales are calibrated against the ride's known speed/rpm envelope and are
+> approximate; re-validate against a speedometer/tach reference before relying on them
+> for anything beyond the braking FSM (which only needs the *shape* of `wheel_speed`).
+> The `0x140` B0 throttle byte and `0x145` B5 both swept on the bench — B0 is the smooth
+> rider-demand signal; `0x145` B5 dithers wildly during the ride and is **not** rider
+> throttle.
+
+#### Decode notes (Speed 400 reference capture)
+
+- **Wheel speed** — `0x102` carries two near-identical 16-bit fields (front B1–B2,
+  rear B3–B4). At `raw/16` km/h the ride sustains **~30 mph** early and peaks at
+  **43 mph at ~74 % of the powered window**, matching the known ride. It is the only
+  field that moves in `wheel.trc`.
+- **RPM** — `0x140` B6 is a coarse live tach: its ratio to wheel speed is constant
+  within each gear (clean gearbox steps ≈ 0.27 / 0.19 / 0.14 / 0.11), it shows cranking
+  at engine start, and it reads **0 whenever the engine is off** — making it the most
+  reliable on/off signal. `0x146` B2–B3 correlates 0.98 with it and decodes to textbook
+  values at `×0.25` (idle 1410, redline-ish 4559), but it holds the idle setpoint when
+  stationary and lingers ~1300 after the kill, so it is the ECU's filtered/target rpm.
+- **Throttle** — `0x140` B0 sweeps the full 0–255 in `throttle.trc`, sits ~2.5 % at
+  idle, and is smooth. `0x145` B5 also swept on the bench but oscillates 0–100 % during
+  the ride (a fast control/dither channel), so it is **not** the rider-throttle signal.
+- **Gear** — `0x142` B3 low nibble steps N→1→2→3→4 and back; every change lands inside
+  a clutch pulse, and it reads Neutral at both engine start and engine stop, as
+  specified for this capture.
+- **Clutch** — `0x142` B5 toggles `0x80`→`0x8D` for ~0.2–2 s bracketing each of the
+  gear changes.
+- **Side stand** — `0x481` B7 bit 0 flips 0→1 shortly after the ride begins and stays
+  up; it is 0 (down) in every bench capture, consistent with the bike being on its
+  stand. (An earlier `0x121`/`0x113` lamp-cluster candidate instead fires the first time
+  the bike exceeds ~10 km/h — that is the warning-lamp self-check clearing, not the
+  stand.)
+- **Engine cutoff** — `0x121` B3 bit 6 asserts with reason code B6 = `0x28`, and the
+  live rpm (`0x140` B6) begins decaying ~30 ms later, reaching 0 within a second. It is
+  the only state change that *precedes* the engine dying; in a drive capture with no
+  kill this code never appears.
+- **Data quirks** — the initial N→1 engagement in this capture has no clutch pulse, and
+  gear 1 is selected just before the side stand retracts; these are the only points
+  where the trace deviates from expected interlock behaviour.
 
 Commit anonymized raw captures under `transmitter/software/captures/` (e.g.
 `speed400_coastdown.log`) so the decode can be re-derived and the Scrambler 400 X /
