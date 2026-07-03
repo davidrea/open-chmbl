@@ -64,14 +64,20 @@ question.
 4. **Record** each as `(can_id, bit offset, length, scale, offset)` and build it up as
    a PCAN-Explorer `.sym`/CANdb so the trace becomes human-readable.
 
-### Rig B — ride logger (Raspberry Pi / Pi Zero, listen-only)
+### Rig B — ride logger (ESP-WROVER-KIT, listen-only)
 
-Used for **wheel speed** and anything that only exists in motion. A Pi with a CAN
-interface (CAN HAT via SocketCAN, or the same PCAN-USB) runs `candump`/`python-can`
-to log **timestamped** frames during real riding.
+Used for **wheel speed** and anything that only exists in motion. A self-contained
+**ESP-WROVER-KIT logger** ([`logger/`](../logger/)) with an external CAN transceiver
+records **timestamped** frames to its on-board microSD during real riding — no Linux to
+babysit. It captures **all** traffic (no filtering) and writes **PCAN `.trc`** files
+that replay through `python-can` exactly like the bench captures. (This replaces the
+Raspberry Pi / SocketCAN + `candump` rig originally sketched here.)
 
-- **Configure the SocketCAN interface listen-only** (`ip link set canX type can
-  bitrate <rate> listen-only on`) — the logger must never transmit on the bus.
+- **Listen-only by default** — the TWAI controller never ACKs or transmits (Kconfig
+  can switch it to normal/ACK for a two-node bench). It must never transmit on the bus.
+- **Operation:** one pushbutton is start/stop — each start opens a new `N.trc`, each
+  stop closes it; a running operations log goes to the serial console (`idf.py
+  monitor`). Set the bus **bit rate** in `menuconfig` (default 500 kbit/s).
 - Capture full rides: roll-ons, coast-downs, hard and gentle braking, stops, and gear
   changes.
 - **Wheel speed is the headline signal** — the braking state machine is built on its
