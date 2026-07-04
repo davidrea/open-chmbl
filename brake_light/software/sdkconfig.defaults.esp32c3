@@ -1,0 +1,7 @@
+# ESP32-C3 (product target) — applied on top of sdkconfig.defaults when the
+# target is esp32c3.
+#
+# Route the console (REPL + logs) to the built-in USB Serial/JTAG controller: an
+# enumerated virtual COM port over the native USB pins (GPIO18/GPIO19) that also
+# carries JTAG debugging on the same cable — no external USB-TTL adapter needed.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y

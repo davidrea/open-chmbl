@@ -1,21 +1,20 @@
 name: Firmware build
 
 # Builds each ESP-IDF firmware with the real Espressif toolchain so we can
-# confirm it compiles.
-#
-# Only the `logger` project is in the matrix here — it is the firmware that
-# exists on this branch. The `brake_light` and `transmitter` ESP-IDF projects
-# land on their own branch and add their matrix entries (esp32c3) when they
-# merge; keep this workflow's matrix in sync as those projects arrive.
+# confirm it compiles. Add more firmware projects to the matrix as they land.
 on:
   push:
     branches: ["**"]
     paths:
+      - "brake_light/software/**"
       - "logger/software/**"
+      - "transmitter/software/**"
       - ".github/workflows/firmware-build.yml"
   pull_request:
     paths:
+      - "brake_light/software/**"
       - "logger/software/**"
+      - "transmitter/software/**"
       - ".github/workflows/firmware-build.yml"
   workflow_dispatch:
 
@@ -27,8 +26,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # esp32c3 is the product target; esp32 (classic) is interim dev
+          # hardware. Both firmwares are kept building on both so the tree stays
+          # portable (console transport etc. are selected by target defaults).
+          - name: brake_light
+            path: brake_light/software
+            target: esp32c3
+          - name: brake_light
+            path: brake_light/software
+            target: esp32
           - name: logger
             path: logger/software
+            target: esp32
+          - name: transmitter
+            path: transmitter/software
+            target: esp32c3
+          - name: transmitter
+            path: transmitter/software
             target: esp32
     steps:
       - name: Checkout

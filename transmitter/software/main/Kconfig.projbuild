@@ -1,0 +1,31 @@
+menu "Transmitter configuration"
+
+    config CHMBL_CLI
+        bool "Enable developer CLI (console shell)"
+        default y
+        help
+            Build the developer command-line shell (design element DE-00). It
+            runs over the console transport selected per target in
+            sdkconfig.defaults.<target> (USB Serial/JTAG on the ESP32-C3, UART
+            on the classic ESP32).
+
+            Disable for production builds; the shell is then absent from the
+            image.
+
+    config CHMBL_STATE_GPIO
+        int "Stand-in state-indicator GPIO number"
+        range 0 33
+        default 8 if IDF_TARGET_ESP32C3
+        default 2 if IDF_TARGET_ESP32
+        default 2
+        help
+            GPIO number (IOxx) lit by the `state` console command whenever the
+            stand-in braking output state is DECEL or BRAKE, until the real CAN
+            decode / state machine / ESP-NOW TX land.
+
+            Defaults to the onboard LED of each target's reference dev board:
+            GPIO8 on the ESP32-C3-DevKitM/C, GPIO2 on the classic ESP32-DevKitC.
+            (On the classic ESP32 avoid GPIO6-11 — they are wired to the SPI
+            flash.) Set this to match the board you are bringing up.
+
+endmenu

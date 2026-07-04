@@ -1,8 +1,7 @@
 # Firmware
 
-Both units run on ESP32-C3 (Arduino-ESP32 or ESP-IDF; ESP-IDF preferred for TWAI +
-ESP-NOW + deep sleep control). The two codebases share a small protocol/profile
-library.
+Both units run on ESP32-C3 using ESP-IDF (chosen for TWAI + ESP-NOW + deep sleep
+control). The two codebases share a small protocol/profile library.
 
 ```
 transmitter/software/   ← bike-side firmware

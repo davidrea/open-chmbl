@@ -21,4 +21,77 @@ the [SMC State Machine Compiler](https://smc.sourceforge.net/) as a CMake pre-bu
 on the build host**; `Smc.jar` lives under `tools/smc/`. Generated `brake_fsm_sm.[ch]`
 are build artifacts and are not committed.
 
-_Firmware to be added (Phase 1–3). Raw CAN capture logs go under `captures/`._
+## Status
+
+Bootstrapped ESP-IDF project — now hosting the first slice of the **developer
+CLI** (design element [DE-00](../../docs/design/README.md)). The real bike-side
+firmware (TWAI/CAN + state machine + ESP-NOW TX) lands on top of this; the
+console exists so each later element can be faked/observed in isolation on the
+bench.
+
+```
+software/
+├── CMakeLists.txt          top-level ESP-IDF project
+├── sdkconfig.defaults      committed defaults (common)
+├── sdkconfig.defaults.esp32c3   product target — USB Serial/JTAG console
+├── sdkconfig.defaults.esp32     interim dev hardware — UART console
+└── main/
+    ├── CMakeLists.txt
+    ├── Kconfig.projbuild    CHMBL_CLI / CHMBL_STATE_GPIO options
+    ├── console.h
+    ├── main.c              app_main: start the console
+    ├── console.c           REPL bootstrap (USB Serial/JTAG, UART fallback)
+    ├── cmd_system.c        `id`    — chip unique ID (base MAC) + chip info
+    └── cmd_state.c         `state` — set/show the stand-in braking output state
+```
+
+`console.c` / `console.h` / `cmd_system.c` are duplicated verbatim with the
+`brake_light` firmware for now; per the [roadmap](../../docs/roadmap.md) they get
+promoted to a shared component once the shell stabilizes.
+
+### Targets & console transport
+
+The firmware builds for two targets; pick one with `idf.py set-target`. The
+console code is identical — only the transport (chosen by the per-target
+`sdkconfig.defaults.<target>`) and the default indicator GPIO differ.
+
+| Target | Status | Console transport | Connect |
+|--------|--------|-------------------|---------|
+| `esp32c3` | product target | built-in **USB Serial/JTAG** (native USB GPIO18/19) | `/dev/ttyACM*`, any baud |
+| `esp32` | interim dev hardware | **UART0** (GPIO1 TX / GPIO3 RX) via onboard USB-UART bridge | `/dev/ttyUSB*`, 115200 |
+
+Commands so far (`help` lists them):
+
+| Command | Purpose |
+|---------|---------|
+| `help` | List commands. |
+| `id` | Chip unique ID (base MAC), model/revision, IDF version. |
+| `state [off\|brake]` | Set / show the stand-in braking output state (no arg = show). Lights the indicator GPIO on BRAKE. (DECEL is a reserved wire state, not TX-emitted — see [protocol.md](../../docs/protocol.md).) |
+
+## Build
+
+Requires [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c3/get-started/)
+(v5.3+). With the IDF environment sourced:
+
+```bash
+cd transmitter/software
+idf.py set-target esp32      # or esp32c3 (re-run set-target to switch)
+idf.py menuconfig            # optional: set the indicator GPIO for your board
+idf.py build
+idf.py flash monitor         # on attached hardware (Ctrl-] to exit the monitor)
+```
+
+`idf.py monitor` attaches to whichever console the target selected; type `help`
+at the `chmbl>` prompt. The indicator pin defaults to the onboard LED of each
+target's reference board (**GPIO2** on the classic ESP32-DevKitC, **GPIO8** on
+the ESP32-C3-DevKitM/C). Change it under *Transmitter configuration → Stand-in
+state-indicator GPIO number*, or override `CONFIG_CHMBL_STATE_GPIO`.
+
+## CI
+
+[`.github/workflows/firmware-build.yml`](../../.github/workflows/firmware-build.yml)
+builds this project with the real ESP-IDF toolchain (`espressif/esp-idf-ci-action`)
+on both `esp32` and `esp32c3` on every push/PR that touches the firmware,
+confirming it compiles.
+
+_Raw CAN capture logs go under `captures/`._
