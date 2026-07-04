@@ -9,14 +9,15 @@ exist** (DE-07) so the [bike profile](../can-profiles.md) is known. Strictly
 
 ## 1. Scope & isolation boundary
 - **In:** TWAI listen-only setup, bit-rate config, ID filtering, frame RX, applying the
-  [`bike_profile_t`](../can-profiles.md#4-profile-data-structure), per-signal
-  validity/staleness.
+  [`bike_profile_t`](../can-profiles.md#4-profile-data-structure) (`wheel_speed`,
+  `clutch_pulled`, `gear`/`neutral`, `throttle_pct`, `rpm`), the derived **acceleration**
+  (smoothed `d(wheel_speed)/dt` in MPH/s), and per-signal validity/staleness.
 - **Out (faked at edges):** upstream is a real bike or a **replayed capture**
   (`can replay`); downstream the state machine (DE-09) is *not* required — we read
   decoded values via `sig show`. The state machine can be tested separately by faking
-  `sig set`.
+  `sig set` / `sig ramp`.
 - **Isolation test:** feed a recorded capture (or bench bus) → verify `sig show`
-  matches the logged actions.
+  (including derived `accel`) matches the logged actions.
 
 ## 2. FFL traceability
 TX-CAN-1…5, TX-DEC-1…7.
@@ -41,8 +42,9 @@ ESP32-C3 TWAI controller + SN65HVD230 transceiver — see
   `sig source can|fake`.
 
 ## 7. Isolation acceptance
-- A replayed brake/throttle/rpm/clutch capture reproduces the correct decoded `sig`
-  values and validity flags; listen-only confirmed (no frames emitted).
+- A replayed coast-down/braking capture reproduces the correct decoded `sig` values
+  (`wheel_speed`, `clutch_pulled`, `gear`/`neutral`, `throttle_pct`, `rpm`), a sane
+  derived `accel`, and the validity flags; listen-only confirmed (no frames emitted).
 
 ## 8. Open items
 - Free-running broadcast vs. request/response (the [DE-07 gate](../can-profiles.md#5-reference-target--triumph-speed-400-tr-series-platform)).

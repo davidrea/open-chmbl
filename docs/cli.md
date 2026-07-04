@@ -40,7 +40,7 @@ always **viewable** regardless of source. This single mechanism is what makes
 | Link-loss failsafe (DE-03) | (stop TX heartbeat) | BL: `link`, `render` |
 | Status indicator (DE-10) | BL: `ind` (force code/color) | BL: `ind show` |
 | CAN decode (DE-08) | TX: replay capture / `can` frames | TX: `sig` (decoded) |
-| BRAKE/DECEL logic (DE-09) | TX: `sig` (brake/throttle/rpm/clutch) | TX: `state` |
+| Braking state machine (DE-09) | TX: `sig` (wheel/clutch/gear) | TX: `state` (state + accel + timers) |
 
 ---
 
@@ -72,15 +72,16 @@ Realizes [TX-CLI-1…5](feature-functions.md#tx-cli--developer-cli).
 
 | Command | Purpose | FFL |
 |---------|---------|-----|
-| `sig show` | Show all decoded signals, units, validity, and source. | TX-CLI-2 |
-| `sig set brake <0\|1>` | Fake the brake switch. | TX-CLI-1 |
-| `sig set throttle <0..100>` | Fake throttle %. | TX-CLI-1 |
-| `sig set rpm <n>` | Fake engine RPM. | TX-CLI-1 |
+| `sig show` | Show all decoded signals, units, validity, and source (incl. derived `accel` in MPH/s). | TX-CLI-2 |
+| `sig set wheel <mph>` | Fake wheel speed (the primary braking input; drives derived `accel`). | TX-CLI-1 |
+| `sig ramp wheel <mph/s> [until <mph>]` | Ramp faked wheel speed at a constant rate so the derived `accel` exercises the on/off thresholds (a constant `sig set wheel` gives `accel ≈ 0`). | TX-CLI-1 |
 | `sig set clutch <0\|1\|na>` | Fake clutch (or mark unavailable). | TX-CLI-1 |
-| `sig set wheel <kph>` | Fake wheel speed. | TX-CLI-1 |
+| `sig set gear <n\|N\|na>` | Fake gear position (`N` = neutral, or mark unavailable). | TX-CLI-1 |
+| `sig set throttle <0..100>` | Fake throttle % (diagnostics). | TX-CLI-1 |
+| `sig set rpm <n>` | Fake engine RPM (diagnostics). | TX-CLI-1 |
 | `sig source can\|fake [name]` | Switch a signal (or all) back to live CAN. | TX-CLI-1 |
-| `state show` | Show current state-machine output + active timers. | TX-CLI-3 |
-| `state force OFF\|DECEL\|BRAKE\|auto` | Force/release the output state. | TX-CLI-3 |
+| `state show` | Show current state (`OFF`/`BRAKING`/`STOPPED`), emitted `brake_state_t`, derived `accel`, and active timers. | TX-CLI-3 |
+| `state force OFF\|BRAKE\|auto` | Force/release the emitted output state. | TX-CLI-3 |
 | `can show` | CAN stats: bit rate, frame rate, IDs seen, bus health. | TX-CLI-4 |
 | `can replay <name>` | Feed a stored capture through the decoder (bench). | TX-CLI-1 |
 | `net show` | ESP-NOW peer, seq, TX rate, send success/fail. | TX-CLI-4 |
