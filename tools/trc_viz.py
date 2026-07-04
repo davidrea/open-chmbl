@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "cantools>=39",
+#     "python-can>=4.3",
+#     "numpy>=1.26",
+#     "dearpygui>=1.11",
+# ]
+# ///
 """Real-time visual playback / scrubber for an open-chmbl CAN ``.trc`` log.
 
 Decodes a PEAK ``.trc`` capture through the ``triumph_tr`` DBC (the same

@@ -32,12 +32,20 @@ live gauges — decoded **throttle, rpm, speed, gear, clutch** plus the computed
 (`can_decode.c`) and the [DE-09 brake FSM](../docs/design/de-09-brake-decel-logic.md),
 and exposes every FSM tunable as a live slider so it doubles as a calibration bench.
 
+The script carries its dependencies inline ([PEP 723]), so [uv] installs them into an
+ephemeral environment on first run — no venv or `pip install` step:
+
 ```sh
-pip install -r tools/requirements.txt
-python tools/trc_viz.py logger/40mph_drive_cycle.trc          # interactive dashboard
-python tools/trc_viz.py logger/40mph_drive_cycle.trc --headless-check  # decode + stats, no GUI
+uv run tools/trc_viz.py logger/40mph_drive_cycle.trc          # interactive dashboard
+uv run tools/trc_viz.py logger/40mph_drive_cycle.trc --headless-check  # decode + stats, no GUI
 ```
+
+Prefer plain `pip`? `pip install -r tools/requirements.txt` then run with `python`
+instead of `uv run`.
 
 The GUI needs a display; on a headless box run it under `xvfb-run`. Use the play/pause
 button and speed multiplier to play in real time (or 0.5/2/4×), or drag the timeline
 cursor / scrub slider to seek.
+
+[PEP 723]: https://peps.python.org/pep-0723/
+[uv]: https://docs.astral.sh/uv/
