@@ -34,6 +34,7 @@ jobs:
             target: esp32c3
           - name: brake_light
             path: brake_light/software
+            target: esp32
           - name: logger
             path: logger/software
             target: esp32
