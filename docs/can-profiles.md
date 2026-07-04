@@ -158,24 +158,22 @@ so the TX *hardware* should carry straight over.
 
 | Property | Value | Confidence |
 |----------|-------|-----------|
-| Connector | **Red 6-pin** OBD2 (Euro 5), under the seat next to the fuse box | High |
-| Adapter | Needs a **6-pin → 16-pin** Triumph/aftermarket adapter for off-the-shelf tools | High |
-| Signals present | **CAN-H / CAN-L** (ISO 11898 / J-2284) **plus** a K-line (legacy ISO 9141) | High |
-| Bit rate | Likely 500 kbit/s — **verify by probing** | Low |
-| Native 6-pin pinout | Maps to the standard 16-pin signals (CAN-H, CAN-L, K-line, 12 V, grounds); **confirm exact pin positions** by service manual / probing before connecting | Low |
+| Connector | **Red 6-pin** OBD2 (Euro 5), under the seat next to the fuse box | Confirmed |
+| Adapter | Needs a **6-pin → 16-pin** Triumph/aftermarket adapter for off-the-shelf tools | Confirmed |
+| Signals present | **CAN-H / CAN-L** (ISO 11898 / J-2284) **plus** a K-line (legacy ISO 9141) | Confirmed |
+| Bit rate | 500 kbit/s | Confirmed |
+| Native 6-pin pinout | Maps to the standard 16-pin signals (CAN-H, CAN-L, K-line, 12 V, ground) | Confirmed |
 
 Street Triple 765 uses the same red 6-pin connector located in the tail.
 
-> ⚠️ **Top risk to resolve first (Phase 2):** does the diagnostic port expose
+> ✅ **Resolved on the reference bike:** does the diagnostic port expose
 > **free-running broadcast** CAN traffic (ECUs continuously chattering, which our
-> **listen-only** sniffer can read), or only **request/response** diagnostic data
-> (KWP2000/UDS — where live values appear *only* after a tester sends a request)?
+> **listen-only** sniffer can read)? _Yes, we have confirmed this experimentally._
 > Our passive, listen-only design depends on the former. If wheel speed / throttle /
 > clutch are only available on request, that conflicts with the
 > [listen-only golden rule](#1-golden-rule-listen-only) and forces a design rethink
 > (e.g. tapping an internal vehicle CAN where the ECUs broadcast among themselves,
-> rather than the diagnostic request/response channel). **Determine this before
-> anything else.**
+> rather than the diagnostic request/response channel).
 
 > ✅ **Resolved on the reference bike: there is no brake-switch signal on the bus.**
 > Repeated captures while working the brake found no toggling bit. The architecture
@@ -222,8 +220,8 @@ confirmed; the decoded overlay is
 
 #### Decode notes (Speed 400 reference capture)
 
-- **Wheel speed** — `0x102` carries two near-identical 16-bit fields (front B1–B2,
-  rear B3–B4). At `raw/16` km/h the ride sustains **~30 mph** early and peaks at
+- **Wheel speed** — `0x102` carries two near-identical 16-bit fields (we suspect front
+  B1–B2, rear B3–B4). At `raw/16` km/h the ride sustains **~30 mph** early and peaks at
   **43 mph at ~74 % of the powered window**, matching the known ride. It is the only
   field that moves in `wheel.trc`.
 - **RPM** — `0x140` B6 is a coarse live tach: its ratio to wheel speed is constant

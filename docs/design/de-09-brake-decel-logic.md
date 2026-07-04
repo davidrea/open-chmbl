@@ -66,8 +66,8 @@ protocol — see [protocol.md](../protocol.md).)
         │   BRAKING      │ ───────────────────────────▶ │          STOPPED           │
         │  (light on)    │                               │        (light on)          │
         └───────┬───────┘                               └─────────────┬──────────────┘
-                │  accel > ACCEL_OFF & speed > 5                       │ speed > STOP_SPEED
-                │  OR steady |accel| < band for STEADY_TIMEOUT         │ OR clutch released in gear
+                │  accel > ACCEL_OFF & speed > 5                       │ speed > MOVING_SPEED
+                │  OR steady |accel| < band for STEADY_TIMEOUT         │ OR (clutch released in gear & rolling)
                 ▼                                                      │ OR stopped > STOP_TIMEOUT
                OFF ◀──────────────────────────────────────────────────┘
 ```
@@ -76,13 +76,13 @@ protocol — see [protocol.md](../protocol.md).)
 
 | From | Guard | To | Rule |
 |------|-------|----|------|
-| `OFF` | deceleration > `decel_on_mphps` | `BRAKING` | 1 — turn on when slowing hard |
+| `OFF` | deceleration > `decel_on_mphps` held for `decel_on_debounce_ms` | `BRAKING` | 1 — turn on when slowing hard |
 | `OFF` | `speed_mph` < `stop_speed_mph` | `STOPPED` | 2 — turn on when settling to a stop |
 | `BRAKING` | `speed_mph` < `stop_speed_mph` | `STOPPED` | 3 — keep on through the stop |
 | `BRAKING` | acceleration > `accel_off_mphps` **and** `speed_mph` > `accel_off_min_speed_mph` | `OFF` | 4 — accelerating away |
 | `BRAKING` | \|accel\| < `steady_band_mphps` for `steady_timeout_ms` | `OFF` | 5 — steady cruise after braking |
-| `STOPPED` | `speed_mph` > `stop_speed_mph` | `OFF` | 6a — moving away from the stop |
-| `STOPPED` | clutch released **and** in gear (not neutral) | `OFF` | 6b — launching |
+| `STOPPED` | `speed_mph` > `moving_speed_mph` | `OFF` | 6a — moving away from the stop (hysteresis) |
+| `STOPPED` | clutch released **and** in gear (not neutral) **and** `speed_mph` > `stop_speed_mph` | `OFF` | 6b — launching |
 | `STOPPED` | stopped for > `stop_timeout_ms` | `OFF` | 6c — parked / long stop |
 
 Notes:
@@ -90,9 +90,30 @@ Notes:
   is in gear (you must hold the clutch in to sit in gear). In **neutral** the guard is
   never true, so a neutral stop holds the light until rule 6a or 6c — exactly the
   parked-at-a-light case.
-- **Stop-and-go:** creeping forward (`speed > stop_speed`) drops `STOPPED → OFF`; the
-  next gentle slowdown re-enters via rule 1/2. Brief off-blinks between creeps are
-  possible; smoothing + anti-strobe dwell bound it. Refinement is an [open item](#8-open-items).
+- **Low-speed hysteresis (rules 6a/6b).** `STOPPED` enters at `speed < stop_speed_mph`
+  (1.0) but only exits for motion at `speed > moving_speed_mph` (3.0); the launch guard
+  (6b) additionally requires the bike to be **rolling** (`speed > stop_speed_mph`) so it
+  cannot ping-pong against the entry rule (rule 2) while sitting still in gear with the
+  clutch out. This is what makes creep-in-traffic hold a steady light instead of
+  strobing. On the [DE-07 40 mph ride log] the gap cut FSM transitions **162 → 48** and
+  sub-0.5 s light blips **65 → 8**. The anti-strobe dwell can't substitute: the guards
+  genuinely oscillate across a single threshold, so the fix is hysteresis, not
+  rate-limiting.
+- **Decel-on debounce (rule 1).** The `OFF → BRAKING` trigger requires
+  `decel > decel_on_mphps` to hold **continuously** for `decel_on_debounce_ms` (120 ms).
+  Momentary throttle-off dips spike the wheel-speed derivative past the threshold and
+  clear within a tick or two; the debounce rejects them **without attenuating the
+  signal**. This is deliberately a debounce and **not** a heavier low-pass filter: extra
+  smoothing would suppress the same spikes only by delaying genuine hard-braking onset,
+  which is the wrong trade for a safety light. Sustained braking still fires ≤ 120 ms
+  later. On the [DE-07 40 mph ride log] it removed the last momentary `BRAKING` blips
+  (8 → 3, transitions 48 → 30) at ~unchanged on-time; larger values began clipping real
+  short brake taps, so 120 ms is the knee.
+- **Stop-and-go:** creeping *past* `moving_speed_mph` drops `STOPPED → OFF`; the next
+  gentle slowdown re-enters via rule 1/2. Sustained slow creep below the hysteresis band
+  now holds the light rather than blinking.
+
+[DE-07 40 mph ride log]: ../can-profiles.md#decode-table
 - **Anti-strobe** is a global `state_min_dwell_ms` floor: the tick handler will not
   dispatch a state-changing `Poll` until the floor has elapsed since the last
   transition. Keeps the `.sm` model focused on logic, not flicker.
@@ -127,9 +148,12 @@ Notes:
   (stays on).
 - From `BRAKING`: a positive accel ramp above threshold (speed > 5 mph) → `OFF` (rule
   4); a held-steady speed → `OFF` after `steady_timeout_ms` (rule 5).
-- From `STOPPED`: pulling away (speed > `stop_speed_mph`) → `OFF`; clutch released in
-  gear → `OFF`; neutral-with-clutch-out does **not** turn off until the `stop_timeout_ms`
-  expires; the 60 s timeout fires.
+- From `STOPPED`: pulling away (speed > `moving_speed_mph`) → `OFF`; clutch released in
+  gear **while rolling** (speed > `stop_speed_mph`) → `OFF`; neutral-with-clutch-out does
+  **not** turn off until the `stop_timeout_ms` expires; the 60 s timeout fires.
+- **Hysteresis:** a slow creep that stays between `stop_speed_mph` and `moving_speed_mph`
+  in **neutral** holds `STOPPED` (no strobe); a standstill in gear with clutch out does
+  **not** ping-pong `STOPPED`↔`OFF`.
 - No transition violates the anti-strobe floor; the emitted `brake_state_t` matches the
   state map.
 
@@ -138,5 +162,9 @@ Notes:
   wheel-speed ride logs).
 - Confirm `gear`/`neutral` and `wheel_speed` are actually decodable on the reference
   bus (presumed available because the cluster displays them — verify in DE-07).
-- Stop-and-go flicker policy (a `STOPPED`→`OFF` hold/hysteresis vs. the literal rules).
+- ~~Stop-and-go flicker policy (a `STOPPED`→`OFF` hold/hysteresis vs. the literal
+  rules).~~ **Resolved:** added `moving_speed_mph` hysteresis on the `STOPPED` exit +
+  a rolling qualifier on the launch guard (see [§4 note](#4-state-machine)); validated on
+  the DE-07 ride log (transitions 162 → 48). Final value (3.0 mph) still to confirm on
+  more logs.
 - Whether to ever use the reserved `ST_DECEL` tier for a softer coasting cue.

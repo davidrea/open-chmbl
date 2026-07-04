@@ -53,8 +53,8 @@ soft-cue tier.) Full rationale and the transition table: [DE-09](design/de-09-br
         │   BRAKING      │ ───────────────────────────▶ │          STOPPED           │
         │  (light on)    │                               │        (light on)          │
         └───────┬───────┘                               └─────────────┬──────────────┘
-                │ accel > ACCEL_OFF & speed > MIN_SPEED                │ speed > STOP_SPEED
-                │ OR |accel| < STEADY_BAND for STEADY_TIMEOUT          │ OR clutch released in gear
+                │ accel > ACCEL_OFF & speed > MIN_SPEED                │ speed > MOVING_SPEED
+                │ OR |accel| < STEADY_BAND for STEADY_TIMEOUT          │ OR (clutch released in gear & rolling)
                 ▼                                                      │ OR stopped > STOP_TIMEOUT
                OFF ◀──────────────────────────────────────────────────┘
 ```
@@ -63,13 +63,13 @@ soft-cue tier.) Full rationale and the transition table: [DE-09](design/de-09-br
 
 | From | Guard | To |
 |------|-------|----|
-| `OFF` | deceleration > `DECEL_ON_MPHPS` | `BRAKING` |
+| `OFF` | deceleration > `DECEL_ON_MPHPS` held for `DECEL_ON_DEBOUNCE_MS` | `BRAKING` |
 | `OFF` | `speed` < `STOP_SPEED_MPH` | `STOPPED` |
 | `BRAKING` | `speed` < `STOP_SPEED_MPH` | `STOPPED` |
 | `BRAKING` | acceleration > `ACCEL_OFF_MPHPS` **and** `speed` > `ACCEL_OFF_MIN_SPEED_MPH` | `OFF` |
 | `BRAKING` | \|accel\| < `STEADY_BAND_MPHPS` held for `STEADY_TIMEOUT_MS` | `OFF` |
-| `STOPPED` | `speed` > `STOP_SPEED_MPH` | `OFF` |
-| `STOPPED` | clutch released **and** in gear (not neutral) | `OFF` |
+| `STOPPED` | `speed` > `MOVING_SPEED_MPH` | `OFF` |
+| `STOPPED` | clutch released **and** in gear (not neutral) **and** `speed` > `STOP_SPEED_MPH` | `OFF` |
 | `STOPPED` | stopped for > `STOP_TIMEOUT_MS` | `OFF` |
 
 `accel` is the slope of a **smoothed** `speed` over a short window (≈100–200 ms), not a
@@ -78,12 +78,38 @@ derivative. The "clutch released in gear" guard reads the **gear/neutral** signa
 neutral stop holds the light (no spurious launch detection); a long stop is bounded by
 `STOP_TIMEOUT_MS`.
 
+**Low-speed hysteresis.** The `STOPPED` state has a **wider exit than entry**: you enter
+at `speed` < `STOP_SPEED_MPH` (1.0) but only leave for motion once `speed` >
+`MOVING_SPEED_MPH` (3.0). The launch guard ("clutch released in gear") likewise requires
+the bike to actually be rolling (`speed` > `STOP_SPEED_MPH`) so it cannot ping-pong
+against the stop-entry rule while sitting still in gear. Without this gap, low-speed
+creep in stop-and-go traffic straddles a single threshold and the light strobes — on the
+[DE-07 40 mph ride log](can-profiles.md#decode-table) it cut FSM transitions from **162
+to 48** (and sub-0.5 s light blips from 65 to 8), turning the two creep zones into solid
+holds. The anti-strobe dwell alone can't fix this: the underlying guards genuinely
+oscillate, so the fix is hysteresis, not just rate-limiting.
+
+**Decel-on debounce (momentary-dip rejection).** The `OFF → BRAKING` trigger requires
+`deceleration > DECEL_ON_MPHPS` to hold **continuously** for `DECEL_ON_DEBOUNCE_MS`
+(120 ms) before the light comes on. Momentary throttle-off dips briefly spike the
+wheel-speed derivative past the threshold and clear within a tick or two; the debounce
+rejects those without attenuating the signal (unlike heavier low-pass smoothing, which
+would suppress the spikes only by **delaying genuine hard-braking onset** — the wrong
+trade for a brake light). A sustained decel still fires, just ≤ 120 ms later. On the
+[DE-07 ride log](can-profiles.md#decode-table) this removed the remaining sub-0.5 s
+`BRAKING` blips (8 → 3, and total transitions 48 → 30) with on-time essentially
+unchanged; larger debounce values started clipping real short brake taps, so 120 ms is
+the knee. This is a **debounce, not a low-pass filter** — chosen precisely to keep
+braking-onset latency bounded and predictable.
+
 **Tunables (defaults — speeds in MPH, accelerations in MPH/s; calibrate on DE-07 logs):**
 
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
 | `DECEL_ON_MPHPS` | 3.0 | Deceleration that turns the light **on**. |
-| `STOP_SPEED_MPH` | 1.0 | At/under = "stopped"; over = "moving away from a stop". |
+| `DECEL_ON_DEBOUNCE_MS` | 120 | Decel must exceed `DECEL_ON_MPHPS` this long before `BRAKING` (rejects momentary dips). |
+| `STOP_SPEED_MPH` | 1.0 | At/under = "stopped" (enter `STOPPED`). |
+| `MOVING_SPEED_MPH` | 3.0 | Must be exceeded to leave `STOPPED` for motion (hysteresis; > `STOP_SPEED_MPH`). |
 | `ACCEL_OFF_MPHPS` | 0.5 | Acceleration that turns the light **off** while moving. |
 | `ACCEL_OFF_MIN_SPEED_MPH` | 5.0 | Only honor the accel-off rule above this speed. |
 | `STEADY_BAND_MPHPS` | 0.5 | \|accel\| under this counts as "steady". |
@@ -114,7 +140,9 @@ typedef struct {
     uint8_t tx_rate_hz;              // 20..50
     // Braking FSM tunables (see table above)
     float    decel_on_mphps;         // 3.0
-    float    stop_speed_mph;         // 1.0
+    uint16_t decel_on_debounce_ms;   // 120  (reject momentary decel dips)
+    float    stop_speed_mph;         // 1.0  (enter STOPPED)
+    float    moving_speed_mph;       // 3.0  (exit STOPPED; hysteresis)
     float    accel_off_mphps;        // 0.5
     float    accel_off_min_speed_mph;// 5.0
     float    steady_band_mphps;      // 0.5
