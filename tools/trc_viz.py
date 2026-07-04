@@ -401,7 +401,9 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
         dpg.configure_item(tag + "_needle",
                            p2=(cx + r * 0.75 * math.cos(th),
                                cy - r * 0.75 * math.sin(th)))
-        dpg.set_value(tag + "_val", text)
+        # draw_text updates its content via configure_item(text=...), not
+        # set_value (which is a no-op on drawlist nodes).
+        dpg.configure_item(tag + "_val", text=text)
 
     # ---- transport / tuning callbacks -------------------------------------
     def on_play():
@@ -516,7 +518,8 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
     # full UI (gauges, timeline, FSM recompute) without a real display.
     if selftest:
         if snapshot:
-            dpg.set_frame_callback(selftest - 2,
+            # fire mid-ride so the snapshot shows representative live values
+            dpg.set_frame_callback(max(1, int(selftest * 0.4)),
                                    lambda: dpg.output_frame_buffer(snapshot))
         frame = 0
 
