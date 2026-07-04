@@ -115,10 +115,12 @@ Realizes [BL-CLI-1…5](feature-functions.md#bl-cli--developer-cli).
 
 ## 5. Implementation notes
 
-> **Status:** first cut landed on `brake_light` (DE-00 🟡). The REPL is up over the
-> ESP32-C3 USB Serial/JTAG console with `help`, `id` (chip unique ID / base MAC +
-> chip info), and `light [on|off|toggle]` (stand-in brake-light GPIO). The
-> source-override registry and the full domain commands below are still to come.
+> **Status:** first cut landed on **both** devices (DE-00 🟡). The REPL is up with
+> `help` and `id` (chip unique ID / base MAC + chip info) on each, plus one
+> stand-in domain per device: `light [on|off|toggle]` on `brake_light` and
+> `state [off|brake]` on the transmitter. It builds for both `esp32c3` (USB
+> Serial/JTAG console) and `esp32` (UART console). The source-override registry
+> and the full domain commands below are still to come.
 
 - **Transport:** line-based over the console. On the ESP32-C3 the default is the
   built-in **USB Serial/JTAG** controller — an enumerated virtual COM port over the
