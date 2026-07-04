@@ -1,2 +1,4 @@
 cantools>=39
 python-can>=4.3
+numpy>=1.26
+dearpygui>=1.11
