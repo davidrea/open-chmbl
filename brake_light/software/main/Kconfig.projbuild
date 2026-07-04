@@ -1,20 +1,31 @@
-menu "Brake_light blink configuration"
+menu "Brake_light configuration"
 
-    config BLINK_GPIO
-        int "Blink LED GPIO number"
-        range 0 30
-        default 8
+    config CHMBL_CLI
+        bool "Enable developer CLI (console shell)"
+        default y
         help
-            GPIO number (IOxx) driving the blink LED.
+            Build the developer command-line shell (design element DE-00). It
+            runs over the console transport selected per target in
+            sdkconfig.defaults.<target> (USB Serial/JTAG on the ESP32-C3, UART
+            on the classic ESP32).
 
-            Default GPIO8 is the onboard LED on the Espressif ESP32-C3-DevKitM/C
-            reference boards. Set this to match the board you are bringing up.
+            Disable for production builds; the shell is then absent from the
+            image.
 
-    config BLINK_PERIOD_MS
-        int "Blink period (ms)"
-        range 100 10000
-        default 1000
+    config CHMBL_LIGHT_GPIO
+        int "Stand-in brake-light GPIO number"
+        range 0 33
+        default 8 if IDF_TARGET_ESP32C3
+        default 2 if IDF_TARGET_ESP32
+        default 2
         help
-            Full on+off period of the blink, in milliseconds.
+            GPIO number (IOxx) driving the stand-in brake light used by the
+            `light` console command, until the real LED render engine (DE-04)
+            lands.
+
+            Defaults to the onboard LED of each target's reference dev board:
+            GPIO8 on the ESP32-C3-DevKitM/C, GPIO2 on the classic ESP32-DevKitC.
+            (On the classic ESP32 avoid GPIO6-11 — they are wired to the SPI
+            flash.) Set this to match the board you are bringing up.
 
 endmenu

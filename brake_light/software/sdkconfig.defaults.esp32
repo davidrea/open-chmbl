@@ -1,0 +1,8 @@
+# Classic ESP32 (interim dev hardware) — applied on top of sdkconfig.defaults
+# when the target is esp32.
+#
+# The classic ESP32 has no USB peripheral, so the console (REPL + logs) runs over
+# UART0 (GPIO1 TX / GPIO3 RX) through the board's onboard USB-UART bridge. This
+# is already the IDF default for esp32; set explicitly for parity with the C3
+# defaults file and to document the divergence.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y

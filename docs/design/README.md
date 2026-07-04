@@ -57,7 +57,7 @@ testable in isolation; CAN-dependent elements last, after captures exist). Statu
 
 | ID | Element | Device(s) | Realizes (FFL) | Depends on | Status |
 |----|---------|-----------|----------------|-----------|--------|
-| **DE-00** | [CLI / shell framework](../cli.md) | both | TX-CLI-*, BL-CLI-* | — | 🔲 |
+| **DE-00** | [CLI / shell framework](../cli.md) | both | TX-CLI-*, BL-CLI-* | — | 🟡 |
 | **DE-01** | [ESP-NOW link](de-01-espnow-link.md) | both | TX-NET-*, BL-NET-* | DE-00 | 🔲 |
 | **DE-02** | [Auto-brightness](de-02-auto-brightness.md) | brake_light | BL-BRT-* | DE-00 | 🔲 |
 | **DE-03** | [Link-loss failsafe](de-03-link-loss-failsafe.md) | brake_light | BL-FS-* | DE-00, DE-01 | 🔲 |
