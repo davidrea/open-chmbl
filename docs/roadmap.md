@@ -89,7 +89,7 @@ ride-logger (SocketCAN, listen-only) for in-motion signals.
 | ESP32-C3 module | Integrated board with onboard WS2812 **and** LiPo charger, or bare module + discretes? | Nice-to-have; pick an integrated one if clean (LOLIN C3 Pico / confirmed FireBeetle 2 C3), else XIAO C3 + external WS2812, or a bare module + both discretes. See [hardware §2.1](hardware.md#21-integrated-module-candidates-ws2812--lipo-charger). |
 | Mount | Adhesive/strap breakaway baseline vs. magnetic shear-release? | Baseline for now; [magnetic mount](design/explorations/mounting-magnetic.md) (helmet-interchangeable VHB steel targets and/or garment/backpack shoulder mount) is a future-state exploration. |
 | Shared code | Real `shared/` lib vs. duplicated headers across `transmitter/software` and `brake_light/software`? | Start duplicated/symlinked; promote to a lib (or PlatformIO `lib_deps`) once it stabilizes. |
-| Framework | ESP-IDF vs. Arduino-ESP32? | ESP-IDF for TWAI + ESP-NOW + deep-sleep control. |
+| Framework | Which framework? | **ESP-IDF** for TWAI + ESP-NOW + deep-sleep control. |
 | Soft `DECEL` tier | Keep a separate softer "coasting" cue below the brake threshold? | Not for now — the light is binary on/off. `ST_DECEL` is **reserved** in the protocol if a second tier is wanted later. |
 | Stop-and-go flicker | How to handle repeated creep-and-stop in traffic? | Open — smoothing + anti-strobe dwell bound it; may add a `STOPPED`→`OFF` hold. See [DE-09 §8](design/de-09-brake-decel-logic.md#8-open-items). |
 | Charge IC | MCP73871 (load-share) vs. TP4056? | MCP73871 so the light works while charging. |
