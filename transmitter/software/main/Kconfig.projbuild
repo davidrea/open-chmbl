@@ -28,6 +28,24 @@ menu "Transmitter configuration"
             (On the classic ESP32 avoid GPIO6-11 — they are wired to the SPI
             flash.) Set this to match the board you are bringing up.
 
+    config CHMBL_CAN_TX_GPIO
+        int "TWAI (CAN) TX GPIO number"
+        range 0 33
+        default 4 if IDF_TARGET_ESP32C3
+        default 21
+        help
+            GPIO wired to the CAN transceiver's TXD (SN65HVD230 D pin). The
+            controller runs in listen-only mode and never drives the bus
+            dominant, but the TWAI peripheral still requires a TX pin.
+
+    config CHMBL_CAN_RX_GPIO
+        int "TWAI (CAN) RX GPIO number"
+        range 0 39
+        default 5 if IDF_TARGET_ESP32C3
+        default 22
+        help
+            GPIO wired to the CAN transceiver's RXD (SN65HVD230 R pin).
+
     config CHMBL_NET_CHANNEL
         int "ESP-NOW Wi-Fi channel"
         range 1 13

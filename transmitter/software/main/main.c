@@ -17,6 +17,7 @@
 #include "console.h"
 #include "pairing.h"
 #include "net.h"
+#include "can_rx.h"
 
 static const char *TAG = "transmitter";
 
@@ -27,6 +28,7 @@ void app_main(void)
     state_init();
     pairing_init();
     net_init();
+    can_rx_init();
 
 #if CONFIG_CHMBL_CLI
     console_start();

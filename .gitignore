@@ -1,2 +1,4 @@
 **/.DS_Store
 **/.cache
+# host golden-test build output
+transmitter/software/test_host/build/

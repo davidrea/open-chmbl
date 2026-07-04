@@ -103,20 +103,38 @@ Raspberry Pi / SocketCAN + `candump` rig originally sketched here.)
    `cantools` against the `.dbc`/`.sym`) and checking recovered signals match the
    logged actions.
 6. Keep **anonymized raw captures** in the repo (PCAN `.trc` and `candump` `.log`) so
-   others can re-derive or extend. The `.dbc`/`.sym` is the ground truth; the compact
-   `bike_profile_t` ([§4](#4-profile-data-structure)) is exported from it.
+   others can re-derive or extend. The **DBC is the committed ground truth**
+   (`profiles/<bike>.dbc`); the compact `bike_profile_t` ([§4](#4-profile-data-structure))
+   is **generated** from it by [`tools/gen_profile.py`](../tools/gen_profile.py) and
+   committed alongside. A host-side golden test
+   ([`tools/golden_check.py`](../tools/golden_check.py)) replays the ride capture
+   through both the embedded C decoder and `cantools` and asserts they agree, so the
+   firmware and the offline validation path can never silently drift apart — see
+   [DE-08 §3a](design/de-08-can-decode.md#3a-architecture-decision--dbc--generated-data-table-hand-written-extractor)
+   for the full rationale.
 
 ---
 
 ## 4. Profile data structure
 
-A profile is plain data — adding a bike later is a data change, not new code:
+A profile is plain data — adding a bike later is a data change, not new code. It is
+**generated** from the bike's DBC by `tools/gen_profile.py` (see §3 step 6 and
+[DE-08 §3a](design/de-08-can-decode.md#3a-architecture-decision--dbc--generated-data-table-hand-written-extractor));
+the struct below is the generator's output shape
+(`transmitter/software/main/bike_profile.h`):
 
 ```c
+typedef enum {
+    CAN_SIG_LE = 0,  // Intel: bit_start is the LSB position
+    CAN_SIG_BE = 1,  // Motorola: bit_start is the MSB position (DBC sawtooth numbering)
+} can_sig_byte_order_t;
+
 typedef struct {
-    uint32_t can_id;     // frame ID carrying this signal
-    uint8_t  bit_start;  // LSB position within the frame
+    uint32_t can_id;     // frame ID carrying this signal; 0 = signal absent
+    uint8_t  bit_start;  // DBC start bit (LSB for LE, MSB for BE)
     uint8_t  bit_len;    // field width in bits
+    uint8_t  byte_order; // can_sig_byte_order_t
+    uint8_t  is_signed;  // two's-complement sign extension when set
     float    scale;      // raw → engineering units
     float    offset;     // raw → engineering units
 } can_signal_t;
@@ -126,20 +144,23 @@ typedef struct {
     uint32_t     bitrate;       // 250000 / 500000
     can_signal_t wheel_speed;   // REQUIRED — primary braking input (decode to km/h or
                                 // mph; the FSM works in mph).
-    can_signal_t clutch_pulled; // 1-bit; gates the stop-exit logic.
-    can_signal_t gear;          // gear position; neutral encoded as gear 0 (or a
-                                // dedicated neutral bit). .can_id = 0 if unavailable.
-    can_signal_t throttle_pct;  // 0..100 %; diagnostics/telemetry.
-    can_signal_t rpm;           // engine rpm; diagnostics/telemetry.
+    uint8_t      wheel_speed_kmh; // 1 if wheel_speed decodes to km/h (converted to mph
+                                // by the decoder).
+    can_signal_t clutch_raw;    // clutch_pulled = (raw != 0); gates the stop-exit logic.
+    can_signal_t gear;          // gear position; neutral encoded as gear 0.
+    // Diagnostics/telemetry — .can_id = 0 if unavailable on this bike:
+    can_signal_t wheel_speed_rear, throttle_pct, rpm, rpm_ecu, side_stand_up,
+                 engine_cutoff_flag, cutoff_reason;
+    uint8_t      cutoff_reason_value; // engine_cutoff = flag && (reason == this)
     // NOTE: no brake_switch — the reference bus does not publish one.
 } bike_profile_t;
 ```
 
-The decoder filters incoming frames to the profile's IDs and applies
-`value = raw * scale + offset` per signal. `wheel_speed` is mandatory; if `gear.can_id
-== 0` the FSM's neutral-aware stop exit degrades to the stop timeout only (see
-[firmware.md](firmware.md#braking-state-machine) and
-[DE-09](design/de-09-brake-decel-logic.md)).
+The decoder (`can_decode.c`) filters incoming frames to the profile's IDs and applies
+`value = raw * scale + offset` per signal, with sign extension when `is_signed`.
+`wheel_speed` is mandatory; if `gear.can_id == 0` the FSM's neutral-aware stop exit
+degrades to the stop timeout only (see [firmware.md](firmware.md#braking-state-machine)
+and [DE-09](design/de-09-brake-decel-logic.md)).
 
 ---
 

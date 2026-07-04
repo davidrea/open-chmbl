@@ -9,12 +9,16 @@ on:
       - "brake_light/software/**"
       - "logger/software/**"
       - "transmitter/software/**"
+      - "profiles/**"
+      - "tools/**"
       - ".github/workflows/firmware-build.yml"
   pull_request:
     paths:
       - "brake_light/software/**"
       - "logger/software/**"
       - "transmitter/software/**"
+      - "profiles/**"
+      - "tools/**"
       - ".github/workflows/firmware-build.yml"
   workflow_dispatch:
 
@@ -54,3 +58,41 @@ jobs:
           esp_idf_version: release-v5.3
           target: ${{ matrix.target }}
           path: ${{ matrix.path }}
+
+  # DE-08 decode correctness: the committed generated profile must match the
+  # DBC, and the C decoder must agree with python-cantools over the reference
+  # ride capture (see docs/design/de-08-can-decode.md).
+  can-decode-golden:
+    name: CAN decode golden test (host)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install cantools / python-can
+        run: pip install -r tools/requirements.txt
+
+      - name: Check generated profile is not stale
+        run: |
+          python3 tools/gen_profile.py profiles/triumph_tr.dbc \
+            --name "Triumph Speed 400 / Scrambler 400X (TR-series)" \
+            --bitrate 500000 \
+            --symbol bike_profile_triumph_tr \
+            --out /tmp/bike_profile_triumph_tr.c
+          diff -u transmitter/software/main/bike_profile_triumph_tr.c \
+            /tmp/bike_profile_triumph_tr.c
+
+      - name: Build host harness
+        run: |
+          cmake -S transmitter/software/test_host \
+            -B transmitter/software/test_host/build \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build transmitter/software/test_host/build
+
+      - name: Golden comparison vs cantools
+        run: python3 tools/golden_check.py
