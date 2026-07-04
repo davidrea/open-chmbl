@@ -2,3 +2,6 @@
 **/.cache
 # host golden-test build output
 transmitter/software/test_host/build/
+# Python tooling bytecode / caches
+**/__pycache__/
+*.py[cod]
