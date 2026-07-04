@@ -54,6 +54,14 @@ First cut landed on both devices. Deviations from the design above, to revisit:
   announcement and adopts whichever peer MAC shows up first (via the ESP-NOW recv
   callback's sender address — no MAC needs to ride in the payload). Encrypted-peer
   registration, NVS persistence, and silent restore-on-boot are as designed.
+- **Pairing race (fixed):** the side that starts broadcasting first typically hears
+  the other's very first announcement within milliseconds — well before its own
+  next scheduled 200 ms broadcast — and used to stop transmitting immediately on
+  discovery. That could starve the second board of ever hearing back, timing it out
+  even though the first board paired successfully. `pairing_start()` now keeps
+  broadcasting for a short grace period (`PAIR_GRACE_SENDS`, ~1.6 s) after finding a
+  peer, so the other side gets a fair chance to discover it back before its own
+  window expires.
 - **Pairing key:** PMK + LMK are a compiled-in placeholder constant (not a real
   per-pair key exchange) — fine for bench bring-up, called out as a follow-up in
   `pairing.c`.

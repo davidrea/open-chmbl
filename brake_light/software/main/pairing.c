@@ -38,6 +38,11 @@ static const char *TAG = "pairing";
 #define NVS_NAMESPACE "chmbl"
 #define NVS_KEY_PEER  "peer_mac"
 
+/* Extra broadcasts sent (200 ms apart) after discovering a peer, purely so
+ * the other side has more chances to discover us back — see the comment in
+ * pairing_start() where this is used. */
+#define PAIR_GRACE_SENDS 8
+
 /* Placeholder pairing key: a compiled-in constant so any two boards running
  * this firmware complete DE-01's encrypted-peer setup without a real
  * key-exchange step. Fine for bench bring-up; a per-pair random key
@@ -228,14 +233,28 @@ bool pairing_start(void)
             break;
         }
     }
-
-    s_pairing_mode = false;
     printf("\n");
 
     if (!paired) {
+        s_pairing_mode = false;
         printf("pairing: timed out, no peer found\n");
         return false;
     }
+
+    /* We likely just discovered the other side from its very first
+     * announcement — often within milliseconds of it starting, well before
+     * our own next scheduled broadcast was due. If we stopped right here,
+     * we might never send another packet, and the other side (started
+     * slightly after us, still listening for up to its own
+     * CHMBL_PAIR_TIMEOUT_S) could time out having never heard from us even
+     * though we succeeded. Keep announcing for a short grace period so it
+     * gets a fair chance to discover us back. */
+    printf("pairing: found a peer, exchanging a few more announcements...\n");
+    for (int i = 0; i < PAIR_GRACE_SENDS; i++) {
+        esp_now_send(s_broadcast_mac, (const uint8_t *)&announce, sizeof(announce));
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+    s_pairing_mode = false;
 
     adopt_peer(found_mac, true);
     printf("pairing: paired with %02x:%02x:%02x:%02x:%02x:%02x\n",
