@@ -89,6 +89,7 @@ class BrakeTunables:
     steady_timeout_ms: float = 1500.0  # rule 5 (open — default)
     stop_timeout_ms: float = 60000.0   # doc: "the 60 s timeout fires"
     state_min_dwell_ms: float = 250.0  # anti-strobe floor (open — default)
+    speed_smooth_ms: float = 80.0      # wheel-speed LPF tau before slope calc
 
 
 # ---- decode pass -----------------------------------------------------------
@@ -107,6 +108,10 @@ class DecodedLog:
     gear: np.ndarray
     clutch_pulled: np.ndarray
     engine_cutoff: np.ndarray
+    # raw per-frame wheel-speed samples (ms, mph), retained so acceleration can
+    # be re-derived when the speed-smoothing tunable changes.
+    raw_spd_t_ms: list
+    raw_spd_v_mph: list
 
 
 def _resample(evt_t: list, evt_v: list, grid_t: np.ndarray,
@@ -122,8 +127,25 @@ def _resample(evt_t: list, evt_v: list, grid_t: np.ndarray,
     return out
 
 
+def _smooth_speed(t_ms: list, v: list, tau_ms: float) -> list:
+    """Causal time-constant EMA low-pass on the raw wheel-speed samples, applied
+    *before* the slope calc so that quantization steps (~0.039 mph) and the odd
+    single-sample glitch don't inject spurious decel spikes. tau_ms<=0 disables
+    it. dt-aware, so it is robust to the variable wheel-speed frame spacing."""
+    if tau_ms <= 0.0 or not v:
+        return list(v)
+    out = [v[0]]
+    s = v[0]
+    for i in range(1, len(v)):
+        dt = t_ms[i] - t_ms[i - 1]
+        a = 1.0 - math.exp(-dt / tau_ms) if dt > 0 else 1.0
+        s += a * (v[i] - s)
+        out.append(s)
+    return out
+
+
 def _compute_accel(spd_t_ms: list, spd_v_mph: list) -> tuple:
-    """Faithful port of ``accel_update`` (can_decode.c): 16-deep ring, slope
+    """Faithful port of ``accel_update`` (can_decode.c): ring buffer, slope
     against the newest sample >= 200 ms back, prime-then-EMA (alpha 0.3).
     Returns (event_times_ms, accel_values) aligned to the wheel-speed frames."""
     n = len(spd_t_ms)
@@ -163,6 +185,16 @@ def _compute_accel(spd_t_ms: list, spd_v_mph: list) -> tuple:
             accel += ACCEL_ALPHA * (slope - accel)
         out[k] = accel
     return spd_t_ms, out
+
+
+def derive_accel(raw_t_ms: list, raw_v_mph: list, grid_t: np.ndarray,
+                 smooth_ms: float) -> np.ndarray:
+    """Smooth the raw wheel-speed, run the slope estimator, and resample the
+    resulting acceleration onto the 50 Hz grid."""
+    sm = _smooth_speed(raw_t_ms, raw_v_mph, smooth_ms)
+    at_ms, accel_v = _compute_accel(raw_t_ms, sm)
+    accel_t = [t / 1000.0 for t in at_ms]
+    return _resample(accel_t, list(accel_v), grid_t, math.nan)
 
 
 def load_log(dbc_path: str, trc_path: str) -> DecodedLog:
@@ -222,30 +254,35 @@ def load_log(dbc_path: str, trc_path: str) -> DecodedLog:
     duration = max(e[0][-1] if e[0] else 0.0 for e in evt.values())
     grid_t = np.arange(0.0, duration + FSM_DT_MS / 1000.0, FSM_DT_MS / 1000.0)
 
-    at_ms, accel_v = _compute_accel(spd_t_ms, spd_v_mph)
-    accel_t = [t / 1000.0 for t in at_ms]
+    accel = derive_accel(spd_t_ms, spd_v_mph, grid_t,
+                         BrakeTunables().speed_smooth_ms)
 
     return DecodedLog(
         duration_s=duration,
         grid_t=grid_t,
         speed_mph=_resample(evt["speed"][0], evt["speed"][1], grid_t, 0.0),
-        accel_mphps=_resample(accel_t, list(accel_v), grid_t, math.nan),
+        accel_mphps=accel,
         throttle_pct=_resample(evt["throttle"][0], evt["throttle"][1], grid_t, 0.0),
         rpm_live=_resample(evt["rpm_live"][0], evt["rpm_live"][1], grid_t, 0.0),
         rpm_ecu=_resample(evt["rpm_ecu"][0], evt["rpm_ecu"][1], grid_t, 0.0),
         gear=_resample(evt["gear"][0], evt["gear"][1], grid_t, 0.0),
         clutch_pulled=_resample(evt["clutch"][0], evt["clutch"][1], grid_t, 0.0),
         engine_cutoff=_resample(evt["cutoff"][0], evt["cutoff"][1], grid_t, 0.0),
+        raw_spd_t_ms=spd_t_ms,
+        raw_spd_v_mph=spd_v_mph,
     )
 
 
 # ---- brake state machine ---------------------------------------------------
-def run_fsm(log: DecodedLog, tun: BrakeTunables) -> np.ndarray:
+def run_fsm(log: DecodedLog, tun: BrakeTunables,
+            accel: np.ndarray = None) -> np.ndarray:
     """Step the DE-09 OFF/BRAKING/STOPPED machine over the 50 Hz grid.
-    First-matching-guard-wins, with the anti-strobe min-dwell floor."""
+    First-matching-guard-wins, with the anti-strobe min-dwell floor. ``accel``
+    defaults to the log's pre-derived series; pass a freshly derived one when
+    the speed-smoothing tunable changes."""
     n = len(log.grid_t)
     speed = log.speed_mph
-    accel = log.accel_mphps
+    accel = log.accel_mphps if accel is None else accel
     clutch = log.clutch_pulled
     gear = log.gear
     out = np.zeros(n, dtype=np.int8)
@@ -319,7 +356,9 @@ def fsm_stats(state: np.ndarray, dt_s: float) -> dict:
 
 # ---- headless check --------------------------------------------------------
 def headless_check(log: DecodedLog, tun: BrakeTunables) -> int:
-    state = run_fsm(log, tun)
+    accel = derive_accel(log.raw_spd_t_ms, log.raw_spd_v_mph, log.grid_t,
+                         tun.speed_smooth_ms)
+    state = run_fsm(log, tun, accel)
     st = fsm_stats(state, FSM_DT_MS / 1000.0)
     peak = float(np.nanmax(log.speed_mph))
     print(f"duration        : {log.duration_s:8.1f} s")
@@ -328,8 +367,8 @@ def headless_check(log: DecodedLog, tun: BrakeTunables) -> int:
     print(f"peak rpm (live) : {float(np.nanmax(log.rpm_live)):8.0f} rpm")
     print(f"peak throttle   : {float(np.nanmax(log.throttle_pct)):8.1f} %")
     print(f"gears seen      : {sorted(set(int(g) for g in np.unique(log.gear)))}")
-    print(f"accel range     : {float(np.nanmin(log.accel_mphps)):+.1f} .. "
-          f"{float(np.nanmax(log.accel_mphps)):+.1f} mph/s")
+    print(f"accel range     : {float(np.nanmin(accel)):+.1f} .. "
+          f"{float(np.nanmax(accel)):+.1f} mph/s")
     print(f"FSM transitions : {st['transitions']:8d}")
     print(f"brake light on  : {st['on_time_s']:8.1f} s "
           f"({st['on_frac']*100:.0f}% of ride)")
@@ -344,7 +383,9 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
     import dearpygui.dearpygui as dpg
 
     dt_s = FSM_DT_MS / 1000.0
-    state = {"arr": run_fsm(log, tun)}
+    # `cur` holds the working acceleration series + FSM output; both are
+    # recomputed whenever a tunable (including speed smoothing) changes.
+    cur = {"accel": log.accel_mphps, "arr": run_fsm(log, tun)}
     play = {"on": False, "t": 0.0, "rate": 1.0}
     grid = log.grid_t
     dur = log.duration_s
@@ -363,11 +404,14 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
         return int(min(len(grid) - 1, max(0, round(t / dt_s))))
 
     def recompute_fsm():
-        state["arr"] = run_fsm(log, tun)
+        # re-derive acceleration (speed smoothing may have changed), then FSM
+        cur["accel"] = derive_accel(log.raw_spd_t_ms, log.raw_spd_v_mph, grid,
+                                    tun.speed_smooth_ms)
+        cur["arr"] = run_fsm(log, tun, cur["accel"])
         # refresh timeline brake trace + stats readout
-        on = (state["arr"] != OFF).astype(float)
+        on = (cur["arr"] != OFF).astype(float)
         dpg.set_value("brake_series", [list(grid), list(on)])
-        st = fsm_stats(state["arr"], dt_s)
+        st = fsm_stats(cur["arr"], dt_s)
         dpg.set_value("fsm_stats",
                       f"transitions: {st['transitions']}    "
                       f"light on: {st['on_time_s']:.1f}s "
@@ -546,7 +590,7 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
                 dpg.add_line_series(list(grid), list(log.speed_mph),
                                     label="speed", tag="speed_series")
             with dpg.plot_axis(dpg.mvYAxis2, label="brake", tag="tl_y2"):
-                on = (state["arr"] != OFF).astype(float)
+                on = (cur["arr"] != OFF).astype(float)
                 dpg.add_line_series(list(grid), list(on), label="brake on",
                                     tag="brake_series", parent="tl_y2")
             dpg.set_axis_limits("tl_y2", -0.05, 1.2)
@@ -577,6 +621,7 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
                 ("stop_speed_mph", 0.2, 4.0),
                 ("state_min_dwell_ms", 0.0, 1000.0),
                 ("stop_timeout_ms", 5000.0, 120000.0),
+                ("speed_smooth_ms", 0.0, 400.0),
             ]
             for name, lo, hi in slider_specs:
                 dpg.add_slider_float(label=name, min_value=lo, max_value=hi,
@@ -627,8 +672,8 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
         gr = int(round(log.gear[i]))
         cl = log.clutch_pulled[i] > 0.5
         cut = log.engine_cutoff[i] > 0.5
-        ac = log.accel_mphps[i]
-        st = int(state["arr"][i])
+        ac = cur["accel"][i]
+        st = int(cur["arr"][i])
 
         gs = GAUGES["speed"]
         set_gauge("speed", gs["cx"], gs["cy"], gs["r"], sp / gs["vmax"],
