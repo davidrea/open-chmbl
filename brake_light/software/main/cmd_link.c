@@ -48,7 +48,8 @@ static int cmd_link(int argc, char **argv)
         printf("last-rx age : %" PRId32 " ms (timeout %u ms)\n",
                info.last_rx_age_ms, info.timeout_ms);
     }
-    printf("rx          : %u ok, %u dropped (stale/replay), %u dropped (unpaired sender)\n",
+    printf("rx          : %" PRIu32 " ok, %" PRIu32 " dropped (stale/replay), "
+           "%" PRIu32 " dropped (unpaired sender)\n",
            info.rx_count, info.drop_stale, net_get_drop_unpaired());
     return 0;
 }

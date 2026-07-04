@@ -10,6 +10,7 @@
  *                        the brake_light to observe its link-loss behaviour
  *                        (DE-03 placeholder)
  */
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,7 +38,7 @@ static int cmd_net(int argc, char **argv)
         printf("state : %s\n", net_is_running() ? "running" : "stopped");
         printf("rate  : %u Hz\n", net_get_rate());
         printf("seq   : %u\n", seq);
-        printf("sent  : %u ok, %u fail\n", ok, fail);
+        printf("sent  : %" PRIu32 " ok, %" PRIu32 " fail\n", ok, fail);
         return 0;
     }
 
