@@ -20,9 +20,16 @@ not suggestions.
   Follow local rules on lamp color and placement.
 - **No flashing brake lights.** Flashing/strobing stop lamps are illegal in many US
   states and under ECE rules. That's why:
-  - All patterns are **steady**, rate-limited against strobing.
-  - The `DECEL` (engine-braking courtesy) cue is **disabled by default** and, even
-    when enabled, is steady — never flashing.
+  - All patterns are **steady**, rate-limited against strobing by a minimum-dwell floor.
+  - The light is **binary on/off**; there is no flashing tier. (`ST_DECEL` is reserved
+    in the protocol but not emitted.)
+- **Inferred, not measured, braking.** Because the reference bike exposes no brake-switch
+  bit, the light reflects **wheel-speed deceleration**, not the rider's brake action.
+  This can diverge from rider intent — e.g. hard engine-braking lights it without the
+  brakes, and trail-braking that barely slows the bike may not. The thresholds and the
+  stop-hold/neutral logic are tuned to bias toward an **honest "the bike is slowing /
+  stopped"** signal rather than mimicking the exact lever state. This is an auxiliary
+  cue and never replaces the factory brake light.
 - **Liability.** A device that influences how following traffic reacts carries real
   liability. Document clearly that builders assume responsibility; this is not a
   certified product.
@@ -39,7 +46,8 @@ not suggestions.
   can't flatten the motorcycle battery.
 - **Robust input protection.** Reverse-polarity protection, TVS, and a fuse on the
   12 V input to survive automotive transients and load dumps.
-- **Fail honest.** The system never fabricates a brake signal. On any internal fault
+- **Fail honest.** The system never fabricates a brake signal: when `wheel_speed` is
+  stale or invalid the state machine cannot assert braking, and on any internal fault
   the watchdog resets rather than latching a stale state.
 
 ---

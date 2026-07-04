@@ -71,8 +71,9 @@ sees and touches, so usability (charging, on/off, brightness) matters.
 | Battery | **1S LiPo**, ~1000–2000 mAh | Size for runtime target (below). Protected cell. |
 | Charge IC | **MCP73871** (or TP4056 + load-share) | MCP73871 does **load sharing** so the light works while charging. TP4056 is cheaper but no load share. |
 | USB-C | USB-C receptacle w/ CC resistors | 5 V sink only; add ESD protection. |
-| LED array | High-power **red** LEDs + constant-current driver, **or** WS2812-style addressable | Addressable = easy patterns but more current/complexity. Plain red + CC driver = efficient, simplest legal-color story. |
-| Brightness control | PWM dimming + **ambient light sensor** | Night brightness must not blind following drivers; day brightness must be visible in sun. Auto-dim is a real safety feature, not a nicety. |
+| LED array | **Discrete 620–630 nm red** (mid-power 2835/3030, ~8–12 emitters) in series string(s) + **boost constant-current driver** | Emitter/flux **down-selected** in [`led-brightness-benchmark.md`](led-brightness-benchmark.md) (~50–80 cd daylight, ~60–100 lm installed red); series-string + boost **topology** worked out in [`de-04`](design/de-04-led-render.md). Series count per string is capped by the driver's V<sub>out</sub> ceiling (≤ ~8 mid-power reds ≈ 18 V for LM3410's 24 V); split into parallel strings beyond that. Addressable RGB is too dim per-pixel for the bar → status indicator only. |
+| LED driver IC | **TI LM3410(X)** boost CC | 2.7–5.5 V in (uses the full 1S discharge), 2.8 A/**24 V** integrated switch, PWM + analog dim, OVP/thermal; ~$1.5, LCSC. The 24 V ceiling caps a single string at ~8 mid-power reds — tall single strings (10–12) or higher V<sub>out</sub> want the upgrade parts: ADI **LT3922‑1** (synchronous 34 V, spread-spectrum, AEC‑Q100) or LCSC-native **DIO5661** (37 V). **MAX16833 rejected** (5 V Vin-min — can't run on 1S). [`de-04 §3.3`](design/de-04-led-render.md). |
+| Brightness control | PWM dimming (driver DIM pin) + analog current trim + **ambient light sensor** | Night brightness must not blind following drivers; day brightness must be visible in sun. Auto-dim is a real safety feature, not a nicety. Day/night intensity endpoints (~50–80 cd → ~5–15 cd) set in [`led-brightness-benchmark.md §4`](led-brightness-benchmark.md#4-design-target-for-the-helmet-bar). Keep dimming PWM > flicker fusion — distinct from the illegal *flashing*. |
 | Battery monitor | Fuel gauge IC or ADC divider | Low-battery warning pattern + cutoff. |
 | User I/O | One button | Power, pairing, brightness cycle. |
 | Status indicator | **Addressable RGB LED** (WS2812-class), **separate from the main bar** | Discrete status/fault by **color + blink code** (pairing, link, charge, fault) — legible even when the bar is off. Can reuse a **module's onboard WS2812** (see §2.1). See [`de-10`](design/de-10-status-indicator.md). |
@@ -140,8 +141,14 @@ bare module + both discretes) is cheap and fully LCSC-sourceable. Decision track
 
 - Exact diagnostic connector + pinout for the **reference bike** (see
   [`can-profiles.md`](can-profiles.md)).
-- LED bar: addressable vs. discrete high-power red — affects driver, current, and
-  the legal-color/no-flash story.
+- ~~LED bar: addressable vs. discrete high-power red~~ — **resolved**: **discrete
+  620–630 nm red mid-power array (~8–12 emitters) on a boost constant-current driver**,
+  sized to a car-CHMSL intensity band (~50–80 cd daylight) in
+  [`led-brightness-benchmark.md`](led-brightness-benchmark.md), with the series/boost
+  topology + driver (**TI LM3410**) selected in [`de-04`](design/de-04-led-render.md).
+  Addressable RGB is too weak per-pixel for the bar and stays the status indicator only.
+  Remaining sub-question: final emitter part/bin, optic/diffuser, and exact emitter count
+  (which also sets series-vs-parallel string layout against the driver's V<sub>out</sub>).
 - ESP32-C3 **module choice** (§2.1): an integrated "WS2812 + LiPo charger" board vs. a
   bare module + discrete charger/indicator. Nice-to-have, not a gate.
 - **Mount direction:** keep the adhesive/strap breakaway baseline, or pursue a

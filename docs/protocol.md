@@ -29,9 +29,9 @@ every tick regardless of whether state changed — see failsafe).
 
 ```c
 typedef enum : uint8_t {
-    ST_OFF   = 0,
-    ST_DECEL = 1,
-    ST_BRAKE = 2,
+    ST_OFF   = 0,  // not braking
+    ST_DECEL = 1,  // RESERVED — not emitted by the current TX FSM (future soft cue)
+    ST_BRAKE = 2,  // braking / stopped (TX states BRAKING and STOPPED both map here)
 } brake_state_t;
 
 typedef struct __attribute__((packed)) {
@@ -80,7 +80,7 @@ is wrong — the RX never has to infer "not braking" from silence.
 ## 5. Timing budget
 
 ```
-CAN frame → decode → state machine      ≤ ~25 ms (incl. 50 Hz tick + debounce)
+CAN frame → decode → state machine      ≤ ~25 ms (incl. 50 Hz tick + accel smoothing)
 ESP-NOW hop                              ≈  2–5 ms
 RX render → LED update                   ≤ ~16 ms (60 Hz)
                                          -----------

@@ -1,17 +1,19 @@
 name: Firmware build
 
-# Builds the ESP-IDF firmware with the real Espressif toolchain so we can
+# Builds each ESP-IDF firmware with the real Espressif toolchain so we can
 # confirm it compiles. Add more firmware projects to the matrix as they land.
 on:
   push:
     branches: ["**"]
     paths:
       - "brake_light/software/**"
+      - "logger/software/**"
       - "transmitter/software/**"
       - ".github/workflows/firmware-build.yml"
   pull_request:
     paths:
       - "brake_light/software/**"
+      - "logger/software/**"
       - "transmitter/software/**"
       - ".github/workflows/firmware-build.yml"
   workflow_dispatch:
@@ -27,6 +29,9 @@ jobs:
           - name: brake_light
             path: brake_light/software
             target: esp32c3
+          - name: logger
+            path: logger/software
+            target: esp32
           - name: transmitter
             path: transmitter/software
             target: esp32c3
