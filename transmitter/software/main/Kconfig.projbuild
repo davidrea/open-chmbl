@@ -28,4 +28,29 @@ menu "Transmitter configuration"
             (On the classic ESP32 avoid GPIO6-11 — they are wired to the SPI
             flash.) Set this to match the board you are bringing up.
 
+    config CHMBL_NET_CHANNEL
+        int "ESP-NOW Wi-Fi channel"
+        range 1 13
+        default 6
+        help
+            Fixed 2.4 GHz channel used for ESP-NOW. Must match the
+            brake_light's CHMBL_NET_CHANNEL — there's no channel-agreement
+            handshake yet (see docs/design/de-01-espnow-link.md open items).
+
+    config CHMBL_NET_RATE_HZ
+        int "Default heartbeat rate (Hz)"
+        range 1 50
+        default 20
+        help
+            Default ESP-NOW heartbeat rate at boot; override at runtime with
+            the `net rate <hz>` console command (TX-CLI-5).
+
+    config CHMBL_PAIR_TIMEOUT_S
+        int "Pairing window (seconds)"
+        range 3 60
+        default 15
+        help
+            How long `pair start` broadcasts/listens for a peer before
+            giving up.
+
 endmenu

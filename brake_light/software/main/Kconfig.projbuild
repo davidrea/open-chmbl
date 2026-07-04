@@ -28,4 +28,42 @@ menu "Brake_light configuration"
             (On the classic ESP32 avoid GPIO6-11 — they are wired to the SPI
             flash.) Set this to match the board you are bringing up.
 
+    config CHMBL_NET_CHANNEL
+        int "ESP-NOW Wi-Fi channel"
+        range 1 13
+        default 6
+        help
+            Fixed 2.4 GHz channel used for ESP-NOW. Must match the
+            transmitter's CHMBL_NET_CHANNEL — there's no channel-agreement
+            handshake yet (see docs/design/de-01-espnow-link.md open items).
+
+    config CHMBL_PAIR_TIMEOUT_S
+        int "Pairing window (seconds)"
+        range 3 60
+        default 15
+        help
+            How long `pair start` broadcasts/listens for a peer before
+            giving up.
+
+    config CHMBL_LINK_TIMEOUT_MS
+        int "Link-loss timeout (ms)"
+        range 50 2000
+        default 300
+        help
+            No valid heartbeat for longer than this and the link watchdog
+            (DE-03 placeholder) declares the link lost. Protocol target is
+            <= 300 ms (docs/protocol.md §4).
+
+    config CHMBL_LINK_BLINK_MS
+        int "Link-lost/waiting blink half-period (ms)"
+        range 50 1000
+        default 250
+        help
+            Placeholder link-loss indication: the single stand-in LED
+            blinks at this half-period instead of tracking the received
+            state, since there's no separate status-indicator LED on the
+            ESP32 DevKitC yet (see DE-10). The real distinct indication
+            (running light + fault blink, plus the status LED) lands with
+            DE-03/DE-10 once a second LED is available.
+
 endmenu

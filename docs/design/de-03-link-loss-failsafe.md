@@ -1,6 +1,6 @@
 # DE-03 — Link-loss failsafe
 
-**Status:** 🔲 not started · **Device(s):** brake_light · **Depends on:** DE-00, DE-01
+**Status:** 🟡 placeholder landed · **Device(s):** brake_light · **Depends on:** DE-00, DE-01
 
 The brake_light's behaviour when the radio link degrades or drops. The safety-critical
 rule: **fail honest** — never go silently dark, never latch a fake `BRAKE`. See
@@ -40,3 +40,16 @@ None beyond DE-01/DE-04 (pure logic over a timestamp).
 ## 8. Open items
 - Exact link-lost vs. waiting visual distinction.
 - Whether a brief glitch should hysteresis-hold before declaring loss.
+
+## 9. Implementation notes
+
+A **placeholder** landed alongside DE-01 (`link.c`), since the ESP32 DevKitC bench
+boards only expose the one stand-in LED (no running-light + separate status LED yet,
+DE-10). The 10 Hz-ish link watchdog computes `WAITING`/`UP`/`LOST` from the last-rx
+age and, while up, mirrors the received state onto the stand-in brake light exactly
+as designed. But for both `WAITING` and `LOST` — since there's only one LED to work
+with — it just **blinks that same LED** (`CHMBL_LINK_BLINK_MS` half-period) rather
+than the designed "steady running light + slow fault blink". This never latches a
+fake `BRAKE` and is observable via `net stop`/`net start` on the transmitter plus
+`link show` on the brake_light, but is not yet the real indication — that lands with
+DE-10 once a second LED is available. No hysteresis on the timeout yet either.
