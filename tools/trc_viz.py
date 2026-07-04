@@ -395,6 +395,31 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
         "rpm": dict(cx=390, cy=140, r=110, label="rpm x1000", vmax=8000.0),
     }
 
+    # segmented gear bar: N + gears 1..6 (DBC range 0..6)
+    GEAR_LABELS = ["N", "1", "2", "3", "4", "5", "6"]
+    GEAR_BAR_W, GEAR_BAR_H, GEAR_GAP = 288, 34, 5
+
+    def draw_gear_bar():
+        n = len(GEAR_LABELS)
+        cw = (GEAR_BAR_W - (n + 1) * GEAR_GAP) / n
+        for k, lab in enumerate(GEAR_LABELS):
+            x0 = GEAR_GAP + k * (cw + GEAR_GAP)
+            dpg.draw_rectangle((x0, 4), (x0 + cw, 4 + GEAR_BAR_H), rounding=4,
+                               color=(60, 66, 78), fill=PANEL,
+                               tag=f"gear_seg_{k}")
+            dpg.draw_text((x0 + cw / 2 - 4, 12), lab, size=18, color=MUTED,
+                          tag=f"gear_seg_t_{k}")
+
+    def set_gear_bar(gr):
+        for k in range(len(GEAR_LABELS)):
+            active = (k == gr)
+            fill = GREEN if (active and gr == 0) else (ACCENT if active
+                                                       else PANEL)
+            dpg.configure_item(f"gear_seg_{k}", fill=fill,
+                               color=(fill if active else (60, 66, 78)))
+            dpg.configure_item(f"gear_seg_t_{k}",
+                               color=(BG if active else MUTED))
+
     def set_gauge(tag, cx, cy, r, frac, text):
         frac = min(1.0, max(0.0, frac))
         th = math.radians(225 - 270 * frac)
@@ -448,6 +473,9 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
             with dpg.child_window(width=320, height=340):
                 dpg.add_text("GEAR", color=MUTED)
                 dpg.add_text("N", tag="gear_val", color=INK)
+                with dpg.drawlist(width=GEAR_BAR_W, height=GEAR_BAR_H + 8,
+                                  tag="gear_bar"):
+                    draw_gear_bar()
                 dpg.add_spacer(height=6)
                 dpg.add_text("throttle", color=MUTED)
                 dpg.add_progress_bar(tag="throttle_bar", width=280,
@@ -560,6 +588,7 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
                   f"{rpm:0.0f}")
 
         dpg.set_value("gear_val", "N" if gr == 0 else str(gr))
+        set_gear_bar(gr if 0 <= gr < len(GEAR_LABELS) else -1)
         dpg.set_value("throttle_bar", max(0.0, min(1.0, thr / 100.0)))
         dpg.configure_item("throttle_bar", overlay=f"{thr:.0f} %")
         dpg.set_value("clutch_val", f"clutch: {'PULLED' if cl else 'released'}")
