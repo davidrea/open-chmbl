@@ -25,11 +25,16 @@ void console_start(void)
     repl_config.prompt = "chmbl>";
     repl_config.max_cmdline_length = 256;
 
-    /* `help` plus our own domains. Registration is independent of the
-     * transport, so new commands just add a cmd_*_register() call here. */
+    /* `help` plus our own domains. Hardware/link bring-up already happened
+     * in app_main() (state_init(), pairing_init(), net_init()) so it works
+     * without the CLI too; this just wires up the commands that fake/inspect
+     * it. Registration is independent of the transport, so new commands
+     * just add a cmd_*_register() call here. */
     ESP_ERROR_CHECK(esp_console_register_help_command());
     cmd_system_register();
     cmd_state_register();
+    cmd_pair_register();
+    cmd_net_register();
 
 #if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
     esp_console_dev_usb_serial_jtag_config_t hw_config =

@@ -7,11 +7,14 @@
  * per-domain command registration hooks; each command lives in its own
  * cmd_*.c so the registry grows one self-contained slice at a time.
  *
- * NOTE: console.c / console.h / cmd_system.c are duplicated verbatim with the
- * brake_light firmware for now; per the roadmap they get promoted to a shared
- * component once the shell stabilizes.
+ * NOTE: console.c / console.h / cmd_system.c / protocol.h / pairing.h /
+ * pairing.c / cmd_pair.c are duplicated verbatim with the brake_light
+ * firmware for now; per the roadmap they get promoted to a shared component
+ * once the shell/wire format stabilizes.
  */
 #pragma once
+
+#include "protocol.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,9 +24,20 @@ extern "C" {
  * UART as a fallback), register all commands, and start the shell task. */
 void console_start(void);
 
+/* Hardware/link bring-up — called unconditionally from app_main(), before
+ * the CONFIG_CHMBL_CLI-gated console_start(), so the actual link works
+ * whether or not the dev CLI is built in. */
+void state_init(void);   /* stand-in state-indicator GPIO (cmd_state.c) */
+
 /* Per-domain command registration (called by console_start). */
 void cmd_system_register(void);   /* `id`    — chip MAC / unique ID + chip info */
 void cmd_state_register(void);    /* `state` — set/show the stand-in braking output state */
+void cmd_pair_register(void);     /* `pair`  — manage the ESP-NOW peer */
+void cmd_net_register(void);      /* `net`   — ESP-NOW heartbeat control/diagnostics */
+
+/* Current stand-in braking output state (cmd_state.c); net.c broadcasts this
+ * in each heartbeat. */
+brake_state_t state_get(void);
 
 #ifdef __cplusplus
 }

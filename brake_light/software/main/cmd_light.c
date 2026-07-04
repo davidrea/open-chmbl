@@ -8,6 +8,10 @@
  *     light on         drive the pin high
  *     light off        drive the pin low
  *     light toggle     invert the pin
+ *
+ * light_set() is also the brake light's single physical output: the link
+ * watchdog (link.c) drives it from the received state (or blinks it as a
+ * link-loss placeholder), same as this CLI command does for bench testing.
  */
 #include <stdio.h>
 #include <string.h>
@@ -24,10 +28,22 @@
 static const char *TAG = "cmd_light";
 static bool s_light_on;
 
-static void light_set(bool on)
+void light_set(bool on)
 {
     s_light_on = on;
     gpio_set_level(LIGHT_GPIO, on ? 1 : 0);
+}
+
+/* GPIO bring-up, split out from cmd_light_register() so the physical output
+ * exists regardless of whether the dev CLI (CONFIG_CHMBL_CLI) is built in —
+ * the link watchdog (link.c) drives it unconditionally, same as the real
+ * render engine will. */
+void light_init(void)
+{
+    gpio_reset_pin(LIGHT_GPIO);
+    gpio_set_direction(LIGHT_GPIO, GPIO_MODE_OUTPUT);
+    light_set(false);
+    ESP_LOGI(TAG, "stand-in brake light on GPIO%d", LIGHT_GPIO);
 }
 
 static int cmd_light(int argc, char **argv)
@@ -55,11 +71,6 @@ static int cmd_light(int argc, char **argv)
 
 void cmd_light_register(void)
 {
-    gpio_reset_pin(LIGHT_GPIO);
-    gpio_set_direction(LIGHT_GPIO, GPIO_MODE_OUTPUT);
-    light_set(false);
-    ESP_LOGI(TAG, "stand-in brake light on GPIO%d", LIGHT_GPIO);
-
     const esp_console_cmd_t cmd = {
         .command = "light",
         .help = "Drive the stand-in brake-light GPIO: light [on|off|toggle]",
