@@ -46,7 +46,14 @@ import cantools
 KMH_TO_MPH = 0.621371
 ACCEL_WINDOW_MS = 200.0     # CAN_DECODE_ACCEL_WINDOW_MS
 ACCEL_ALPHA = 0.3           # CAN_DECODE_ACCEL_ALPHA
-SPEED_HIST = 16             # CAN_DECODE_SPEED_HIST
+# NOTE: the firmware's CAN_DECODE_SPEED_HIST is 16, but the reference bus emits
+# wheel-speed (0x102) at ~100 Hz (~10 ms apart), so 16 samples span only
+# ~150 ms — less than ACCEL_WINDOW_MS. The "newest sample >= 200 ms old" search
+# then almost never succeeds and the derived acceleration stays frozen (it only
+# updates on rare >200 ms frame gaps). The ring must hold enough samples to
+# actually span the window; 32 (~320 ms at 100 Hz) does, with margin. This is a
+# firmware bug: can_decode.h should size SPEED_HIST to the window x frame rate.
+SPEED_HIST = 32             # cf. CAN_DECODE_SPEED_HIST (16 — too small, see above)
 STALE_MS = 1000.0           # CAN_DECODE_STALE_MS
 CUTOFF_REASON_VALUE = 0x28
 
@@ -395,6 +402,48 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
         "rpm": dict(cx=390, cy=140, r=110, label="rpm x1000", vmax=8000.0),
     }
 
+    # bipolar accel/decel bar, centred under the speed gauge. Fills left (red)
+    # for deceleration, right (green) for acceleration; a marker shows the
+    # decel-on trigger so you can see when braking should fire.
+    AX_C, AX_Y, AX_HALF, AX_H = 130, 264, 105, 15
+    ACCEL_FS = 10.0             # full-scale mph/s at the bar ends
+
+    def draw_accel_bar():
+        dpg.draw_rectangle((AX_C - AX_HALF, AX_Y), (AX_C + AX_HALF, AX_Y + AX_H),
+                           rounding=3, color=(60, 66, 78), fill=PANEL)
+        dpg.draw_line((AX_C, AX_Y - 3), (AX_C, AX_Y + AX_H + 3), color=MUTED,
+                      thickness=1)
+        # dynamic fill + decel-on trigger marker + numeric readout
+        dpg.draw_rectangle((AX_C, AX_Y), (AX_C, AX_Y + AX_H), fill=GREEN,
+                           color=GREEN, tag="accel_fill")
+        dpg.draw_line((AX_C, AX_Y - 4), (AX_C, AX_Y + AX_H + 4), color=WARN,
+                      thickness=2, tag="accel_thresh")
+        dpg.draw_text((AX_C - AX_HALF, AX_Y + AX_H + 4), "decel", size=12,
+                      color=MUTED)
+        dpg.draw_text((AX_C + AX_HALF - 30, AX_Y + AX_H + 4), "accel", size=12,
+                      color=MUTED)
+        dpg.draw_text((AX_C - 60, AX_Y - 22), "accel  0.0 mph/s", size=16,
+                      color=INK, tag="accel_bar_val")
+
+    def set_accel_bar(value, decel_on):
+        if math.isnan(value):
+            dpg.configure_item("accel_fill", pmin=(AX_C, AX_Y),
+                               pmax=(AX_C, AX_Y + AX_H))
+            dpg.configure_item("accel_bar_val", text="accel  -- mph/s")
+        else:
+            frac = max(-1.0, min(1.0, value / ACCEL_FS))
+            x = AX_C + frac * AX_HALF
+            col = GREEN if value >= 0 else BRAKE_RED
+            lo, hi = (AX_C, x) if x >= AX_C else (x, AX_C)
+            dpg.configure_item("accel_fill", pmin=(lo, AX_Y),
+                               pmax=(hi, AX_Y + AX_H), fill=col, color=col)
+            dpg.configure_item("accel_bar_val",
+                               text=f"accel  {value:+.1f} mph/s")
+        # trigger marker sits at -decel_on (left of centre)
+        tx = AX_C - max(0.0, min(1.0, decel_on / ACCEL_FS)) * AX_HALF
+        dpg.configure_item("accel_thresh", p1=(tx, AX_Y - 4),
+                           p2=(tx, AX_Y + AX_H + 4))
+
     # segmented gear bar: N + gears 1..6 (DBC range 0..6)
     GEAR_LABELS = ["N", "1", "2", "3", "4", "5", "6"]
     GEAR_BAR_W, GEAR_BAR_H, GEAR_GAP = 288, 34, 5
@@ -469,6 +518,7 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
                     for _name, _g in GAUGES.items():
                         draw_gauge(_name, _g["cx"], _g["cy"], _g["r"],
                                    _g["label"])
+                    draw_accel_bar()
             # right: gear / clutch / brake indicators
             with dpg.child_window(width=320, height=340):
                 dpg.add_text("GEAR", color=MUTED)
@@ -589,6 +639,7 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
 
         dpg.set_value("gear_val", "N" if gr == 0 else str(gr))
         set_gear_bar(gr if 0 <= gr < len(GEAR_LABELS) else -1)
+        set_accel_bar(ac, tun.decel_on_mphps)
         dpg.set_value("throttle_bar", max(0.0, min(1.0, thr / 100.0)))
         dpg.configure_item("throttle_bar", overlay=f"{thr:.0f} %")
         dpg.set_value("clutch_val", f"clutch: {'PULLED' if cl else 'released'}")
