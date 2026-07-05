@@ -1,0 +1,46 @@
+VERSION "open-chmbl triumph_tr v1"
+
+NS_ :
+    CM_
+    BA_DEF_
+    BA_
+    VAL_
+    BA_DEF_DEF_
+
+BS_:
+
+BU_: ECU
+
+BO_ 258 WHEEL_SPEEDS: 8 ECU
+ SG_ WHEEL_SPEED_FRONT : 15|16@0+ (0.0625,0) [0|4095] "km/h" Vector__XXX
+ SG_ WHEEL_SPEED_REAR : 31|16@0+ (0.0625,0) [0|4095] "km/h" Vector__XXX
+
+BO_ 320 ENGINE_LIVE: 8 ECU
+ SG_ THROTTLE_PCT : 0|8@1+ (0.392157,0) [0|100] "%" Vector__XXX
+ SG_ RPM_LIVE : 48|8@1+ (31.4,0) [0|8007] "rpm" Vector__XXX
+
+BO_ 322 TRANSMISSION: 8 ECU
+ SG_ GEAR : 24|4@1+ (1,0) [0|6] "" Vector__XXX
+ SG_ CLUTCH_RAW : 40|4@1+ (1,0) [0|15] "" Vector__XXX
+
+BO_ 326 ENGINE_ECU: 8 ECU
+ SG_ RPM_ECU : 23|16@0+ (0.25,0) [0|16383] "rpm" Vector__XXX
+
+BO_ 289 BODY_STATUS: 8 ECU
+ SG_ ENGINE_CUTOFF_FLAG : 30|1@1+ (1,0) [0|1] "" Vector__XXX
+ SG_ CUTOFF_REASON : 48|8@1+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 1153 CHASSIS_STATUS: 8 ECU
+ SG_ SIDE_STAND_UP : 56|1@1+ (1,0) [0|1] "" Vector__XXX
+
+CM_ "Triumph TR-series (Speed 400 / Scrambler 400 X) profile. Empirically reverse-engineered from listen-only captures of a Speed 400 (see docs/can-profiles.md section 5); NOT from Triumph documentation. Scales for wheel speed and rpm are calibrated against the ride's known envelope and are approximate.";
+CM_ BO_ 258 "0x102 - two near-identical big-endian 16-bit wheel speeds; front B1-B2, rear B3-B4 (suspected order). raw/16 -> km/h. Primary braking input.";
+CM_ SG_ 258 WHEEL_SPEED_FRONT "REQUIRED - primary braking input for the deceleration FSM.";
+CM_ BO_ 320 "0x140 - rider throttle demand (B0, raw/2.55 -> %) and coarse live tach (B6, raw*~31.4 -> rpm; 0 = engine off).";
+CM_ SG_ 320 RPM_LIVE "Coarse live tach; reads 0 whenever the engine is off - best engine on/off indicator.";
+CM_ BO_ 322 "0x142 - gear position (B3 low nibble, 0 = neutral) and clutch (B5: 0x80 released, 0x8D pulled - decode low nibble, pulled when != 0).";
+CM_ SG_ 322 CLUTCH_RAW "Predicate signal: clutch_pulled = (CLUTCH_RAW != 0). Observed 0x0 released, 0xD pulled.";
+CM_ BO_ 326 "0x146 - ECU filtered/target rpm (B2-B3 big-endian, raw*0.25). Holds idle setpoint when stationary; not raw crank speed.";
+CM_ BO_ 289 "0x121 - engine cutoff (kill switch): B3 bit6 asserted AND B6 == 0x28. Asserts ~30 ms before live rpm decays.";
+CM_ SG_ 289 CUTOFF_REASON "Predicate signal: engine_cutoff = ENGINE_CUTOFF_FLAG && (CUTOFF_REASON == 0x28).";
+CM_ BO_ 1153 "0x481 - side stand: B7 bit0, 1 = stand up, 0 = down.";

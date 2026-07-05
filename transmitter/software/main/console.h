@@ -34,6 +34,8 @@ void cmd_system_register(void);   /* `id`    — chip MAC / unique ID + chip inf
 void cmd_state_register(void);    /* `state` — set/show the stand-in braking output state */
 void cmd_pair_register(void);     /* `pair`  — manage the ESP-NOW peer */
 void cmd_net_register(void);      /* `net`   — ESP-NOW heartbeat control/diagnostics */
+void cmd_can_register(void);      /* `can`   — CAN RX diagnostics + bench replay */
+void cmd_sig_register(void);      /* `sig`   — decoded-signal show/fake/ramp/source */
 
 /* Current stand-in braking output state (cmd_state.c); net.c broadcasts this
  * in each heartbeat. */
