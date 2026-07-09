@@ -1,11 +1,17 @@
 /*
- * open-chmbl CAN data logger — ESP-WROVER-KIT v4.1 firmware.
+ * open-chmbl CAN data logger — custom ESP32-S3 logger board firmware.
  *
  * Captures ALL CAN traffic (no filtering) in listen-only mode and writes it to
  * the on-board microSD as PCAN .trc (v2.1) ASCII files. A single debounced
  * pushbutton toggles recording: each start opens a new N.trc (N an increasing
- * integer), each stop closes it. The onboard red LED (status_led.h) shows
+ * integer), each stop closes it. The status LED (status_led.h) shows
  * idle/recording/error at a glance; the full operations log goes to serial.
+ *
+ * Target is the custom logger PCB (see logger/hardware/): ESP32-S3-WROOM-1-N8,
+ * onboard TCAN330 CAN transceiver (with its silent-mode S pin on a GPIO), and a
+ * microSD wired to the SoC's native SDMMC host (full 4-bit bus). Pin map comes
+ * from the schematic; the retired ESP-WROVER-KIT bring-up rig used different
+ * GPIOs (see the Kconfig defaults and logger/software/README.md).
  *
  * This is the DE-07 "ride logger" — a self-contained ESP32 replacement for the
  * Raspberry Pi rig (see docs/can-profiles.md §3). Power-loss / card-removal
@@ -25,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "driver/gpio.h"
 #include "driver/sdmmc_host.h"
 #include "driver/twai.h"
 #include "esp_err.h"
@@ -112,9 +119,14 @@ static const char *logger_mode_str(void)
 
 static sdmmc_card_t *s_card;
 
-/* Mount the microSD as FAT at TRC_DIR over the ESP32 SDMMC host (4-bit, the
- * WROVER-KIT wiring — CLK14/CMD15/D0-3 = 2/4/12/13). Same config the ESP-IDF
- * sd_card example uses on this board. Returns true on success. */
+/* Mount the microSD as FAT at TRC_DIR over the ESP32-S3 SDMMC host (full 4-bit
+ * bus, J5). Unlike the classic ESP32 (fixed SDMMC IO-MUX pins), the ESP32-S3
+ * routes the SDMMC host through the GPIO matrix, so every bus pin must be
+ * assigned explicitly from the board's routing (Kconfig defaults, see
+ * ../hardware/README.md §3.2). Card-detect (DET_A, GPIO8 on this board) is left
+ * unused: this firmware has no hot-plug path, so gating the mount on a DET
+ * polarity we can't verify on the bench would only add a failure mode.
+ * Returns true on success. */
 static bool sd_mount(void)
 {
     const esp_vfs_fat_sdmmc_mount_config_t mount_cfg = {
@@ -123,8 +135,14 @@ static bool sd_mount(void)
         .allocation_unit_size = 16 * 1024,
     };
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();               /* SDMMC slot 1 */
-    sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT(); /* IO-MUX pins */
+    sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
     slot.width = 4;
+    slot.clk = CONFIG_LOGGER_SD_CLK_GPIO;
+    slot.cmd = CONFIG_LOGGER_SD_CMD_GPIO;
+    slot.d0  = CONFIG_LOGGER_SD_D0_GPIO;
+    slot.d1  = CONFIG_LOGGER_SD_D1_GPIO;
+    slot.d2  = CONFIG_LOGGER_SD_D2_GPIO;
+    slot.d3  = CONFIG_LOGGER_SD_D3_GPIO;
     slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
     return esp_vfs_fat_sdmmc_mount(TRC_DIR, &host, &slot, &mount_cfg, &s_card) == ESP_OK;
 }
@@ -401,8 +419,38 @@ static void button_init(void)
 
 /* ---- CAN init ------------------------------------------------------------ */
 
+/* Drive the CAN transceiver's silent-mode (S) pin (TCAN330 U2 pin 8) to match
+ * the configured mode: high forces the transceiver RX-only in hardware (its TX
+ * driver is disabled) for listen-only, low allows normal TX/ACK. This is a
+ * hardware failsafe on top of the TWAI controller's own listen-only setting;
+ * the S pin is a feature of the custom board absent on the WROVER-KIT rig.
+ *
+ * The default GPIO (45) is an ESP32-S3 strapping pin, but its strap is sampled
+ * once at reset before any of our code runs, so driving it as a normal output
+ * afterward is safe (see ../hardware/README.md §5). Skipped when the pin is
+ * configured to -1 (no S pin wired, e.g. the external-transceiver bring-up rig). */
+static void can_transceiver_init(void)
+{
+#if CONFIG_LOGGER_CAN_SILENT_GPIO >= 0
+    const gpio_config_t cfg = {
+        .pin_bit_mask = 1ULL << CONFIG_LOGGER_CAN_SILENT_GPIO,
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    ESP_ERROR_CHECK(gpio_config(&cfg));
+#if CONFIG_LOGGER_CAN_LISTEN_ONLY
+    gpio_set_level(CONFIG_LOGGER_CAN_SILENT_GPIO, 1);   /* silent: RX-only */
+#else
+    gpio_set_level(CONFIG_LOGGER_CAN_SILENT_GPIO, 0);   /* normal: TX/ACK   */
+#endif
+#endif
+}
+
 static void can_init(void)
 {
+    /* Put the transceiver into the right RX-only/normal state before the
+     * controller is installed, so the bus is never driven unexpectedly. */
+    can_transceiver_init();
+
     /* Select the mode into a variable first: preprocessor directives inside a
      * function-like macro's argument list are undefined behavior. */
 #if CONFIG_LOGGER_CAN_LISTEN_ONLY

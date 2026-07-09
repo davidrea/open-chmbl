@@ -2,33 +2,57 @@ menu "CAN logger configuration"
 
     config LOGGER_BUTTON_GPIO
         int "Start/stop pushbutton GPIO number"
-        range 0 39
-        default 33
+        range 0 48
+        default 6
         help
             GPIO wired to the momentary start/stop pushbutton (other side to GND).
             The pin is driven with an internal pull-up and the button reads
             active-low; debouncing is handled by the iot_button component.
 
-            Default GPIO33 is free on the ESP-WROVER-KIT v4.1 (the LCD, microSD,
-            PSRAM and console UART occupy the rest) and supports an internal
-            pull-up. GPIO32 is the obvious alternative.
+            Default GPIO6 is the ESP32-S3's BTN_SIG net on the custom logger
+            board (J4 button breakout, pulled up to 3V3, active-low -- see
+            ../hardware/README.md). On the retired ESP-WROVER-KIT bring-up rig
+            this was GPIO33.
 
     config LOGGER_CAN_TX_GPIO
         int "CAN (TWAI) TX GPIO number -> transceiver TXD"
-        range 0 33
-        default 26
+        range 0 48
+        default 21
         help
-            GPIO routed to the TWAI transmit signal, wired to the external CAN
-            transceiver's TXD input. GPIO26 is free on the WROVER-KIT. Even in
-            listen-only mode the driver still claims this pin.
+            GPIO routed to the TWAI transmit signal, wired to the onboard CAN
+            transceiver's (TCAN330, U2) TXD input. GPIO21 on the custom
+            ESP32-S3 logger board. Even in listen-only mode the driver still
+            claims this pin. (GPIO26 on the retired ESP-WROVER-KIT.)
 
     config LOGGER_CAN_RX_GPIO
         int "CAN (TWAI) RX GPIO number <- transceiver RXD"
-        range 0 39
-        default 27
+        range 0 48
+        default 47
         help
-            GPIO routed to the TWAI receive signal, wired from the external CAN
-            transceiver's RXD output. GPIO27 is free on the WROVER-KIT.
+            GPIO routed to the TWAI receive signal, wired from the onboard CAN
+            transceiver's (TCAN330, U2) RXD output. GPIO47 on the custom
+            ESP32-S3 logger board. (GPIO27 on the retired ESP-WROVER-KIT.)
+
+    config LOGGER_CAN_SILENT_GPIO
+        int "CAN transceiver silent-mode (S) GPIO number (-1 to disable)"
+        range -1 48
+        default 45
+        help
+            GPIO wired to the CAN transceiver's silent-mode (S) pin (TCAN330 U2
+            pin 8). When driven high the transceiver is RX-only in hardware
+            (its TX driver is disabled), independent of the TWAI controller's
+            own listen-only setting -- a hardware failsafe for this listen-only
+            device. Firmware drives it high when LOGGER_CAN_LISTEN_ONLY is set
+            and low otherwise.
+
+            Default GPIO45 matches the custom logger board. NOTE: GPIO45 is an
+            ESP32-S3 strapping pin (flash/PSRAM voltage select); it is only
+            sampled at reset, so driving it as an output afterward is safe, but
+            see ../hardware/README.md §5 for the board-level pull-up caveat.
+
+            Set to -1 on the ESP-WROVER-KIT bring-up rig or any board whose
+            external transceiver has no S pin wired to a GPIO; the firmware then
+            leaves the pin alone and relies on TWAI listen-only mode only.
 
     choice LOGGER_CAN_BITRATE
         prompt "CAN bit rate"
@@ -68,29 +92,80 @@ menu "CAN logger configuration"
 
 endmenu
 
+menu "microSD (SDMMC) configuration"
+
+    comment "SDMMC bus pins -- fixed by the custom logger board's routing"
+
+    config LOGGER_SD_CLK_GPIO
+        int "SDMMC CLK GPIO number"
+        range 0 48
+        default 9
+        help
+            SDMMC clock line to the microSD socket (J5). Unlike the classic
+            ESP32 (fixed SDMMC IO-MUX pins), the ESP32-S3 routes the SDMMC host
+            through the GPIO matrix, so every bus pin must be assigned. Defaults
+            match the custom logger board -- change all six together only if you
+            re-route the card slot.
+
+    config LOGGER_SD_CMD_GPIO
+        int "SDMMC CMD GPIO number"
+        range 0 48
+        default 10
+        help
+            SDMMC command line to the microSD socket (J5).
+
+    config LOGGER_SD_D0_GPIO
+        int "SDMMC DAT0 GPIO number"
+        range 0 48
+        default 48
+        help
+            SDMMC data line 0 to the microSD socket (J5).
+
+    config LOGGER_SD_D1_GPIO
+        int "SDMMC DAT1 GPIO number"
+        range 0 48
+        default 3
+        help
+            SDMMC data line 1 to the microSD socket (J5).
+
+    config LOGGER_SD_D2_GPIO
+        int "SDMMC DAT2 GPIO number"
+        range 0 48
+        default 12
+        help
+            SDMMC data line 2 to the microSD socket (J5).
+
+    config LOGGER_SD_D3_GPIO
+        int "SDMMC DAT3 GPIO number"
+        range 0 48
+        default 11
+        help
+            SDMMC data line 3 to the microSD socket (J5).
+
+endmenu
+
 menu "Status LED"
 
     config LOGGER_STATUS_LED_GPIO
         int "Status LED GPIO number"
-        range 0 39
-        default 0
+        range 0 48
+        default 18
         help
-            GPIO driving the WROVER-KIT's onboard red LED die. GPIO0 is the
-            only leg of the board's RGB LED not shared with the microSD bus
-            (green=GPIO2/D0, blue=GPIO4/D1) or the LCD (also removed, for the
-            same reason -- see the top-level README). GPIO0 is also the
-            boot-mode strapping pin, but its strap value is sampled fresh at
-            each reset before any of our code runs, so driving it as a normal
-            output afterward is safe -- this is exactly how Espressif's own
-            board wires this LED (bsp_led_t: BSP_LED_RED = GPIO_NUM_0).
+            GPIO driving the status LED. On the custom logger board this is
+            GPIO18, which switches an external panel LED through Q1 (a low-side
+            2N7002K) on the J4 breakout -- see ../hardware/README.md §3.3. Driven
+            high = LED on (see LOGGER_STATUS_LED_ACTIVE_LOW).
+
+            On the retired ESP-WROVER-KIT bring-up rig this was GPIO0, the only
+            leg of the board's onboard RGB LED not shared with the microSD bus.
 
     config LOGGER_STATUS_LED_ACTIVE_LOW
         bool "LED is active-low"
         default n
         help
-            Off by default (GPIO high = LED on), matching Espressif's own
-            esp_wrover_kit BSP driver (bsp_led_set() writes the level
-            directly, no inversion). Toggle if the LED behaves backwards on
-            your board (lit while idle, dark while recording).
+            Off by default (GPIO high = LED on). On the custom logger board the
+            LED is switched by a low-side N-FET (Q1), so a high gate drive lights
+            it -- active-high, matching this default. Toggle if the LED behaves
+            backwards on your board (lit while idle, dark while recording).
 
 endmenu

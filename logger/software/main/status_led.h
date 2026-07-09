@@ -1,8 +1,9 @@
 /*
- * Status indicator on the WROVER-KIT's onboard red LED die (GPIO0 -- the only
- * leg of the RGB LED not shared with the microSD bus or the (removed) LCD).
- * A background task owns the GPIO and renders whichever state is current;
- * status_led_set() just records the desired state and returns immediately.
+ * Status indicator on the logger board's status LED (GPIO18, switching an
+ * external panel LED through a low-side N-FET on the J4 breakout; the GPIO is
+ * configurable -- see status_led.c / Kconfig). A background task owns the GPIO
+ * and renders whichever state is current; status_led_set() just records the
+ * desired state and returns immediately.
  */
 #ifndef STATUS_LED_H
 #define STATUS_LED_H

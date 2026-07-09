@@ -19,9 +19,9 @@ throughput a listen-only, no-filtering CAN capture needs. **The ESP32-C3 doesn't
 an SDMMC host peripheral** — only SPI — so it was not an option for this board. The
 C3 stays the right choice for `brake_light/`, which has no SD card.
 
-`-N8` = 8 MB flash, **no PSRAM**. (The retired ESP-WROVER-KIT target had 4 MB of
-PSRAM the firmware currently depends on — `CONFIG_SPIRAM=y` — see the note in
-[`../software/README.md`](../software/README.md).)
+`-N8` = 8 MB flash, **no PSRAM**. (The retired ESP-WROVER-KIT bring-up target had
+4 MB of PSRAM; the firmware's old `CONFIG_SPIRAM=y` dependency was dropped in the
+port to this board — see [`../software/README.md`](../software/README.md).)
 
 ## 2. Power
 

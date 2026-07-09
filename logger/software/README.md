@@ -1,17 +1,15 @@
 # logger — software
 
-CAN data-logger firmware for the **ESP-WROVER-KIT v4.1** (ESP32-WROVER, **ESP-IDF**).
-Captures all CAN traffic, no filtering, and writes **PCAN `.trc` (v2.1)** files to the
-on-board microSD.
+CAN data-logger firmware for the **custom logger board** ([`../hardware/`](../hardware) —
+**ESP32-S3-WROOM-1-N8**, onboard TCAN330 CAN transceiver, native SDMMC microSD),
+built with **ESP-IDF**. Captures all CAN traffic, no filtering, and writes
+**PCAN `.trc` (v2.1)** files to the microSD.
 
-> **Status:** the project now has a custom PCB — [`../hardware/`](../hardware)
-> (ESP32-S3-WROOM-1, onboard CAN transceiver, native SDMMC microSD) — but this
-> firmware has **not yet been ported to it**. Everything below (target `esp32`, the
-> GPIO table, the WROVER-KIT-specific LCD/SD note) describes the current bring-up
-> hardware only. Porting to the custom board means at minimum: `set-target esp32s3`,
-> a new pin map (see the schematic in `../hardware/`), and dropping the
-> `CONFIG_SPIRAM=y` dependency below — the ESP32-S3-WROOM-1-N8 on the new board has
-> **no PSRAM**.
+> **Status:** ported to the custom ESP32-S3 board. Target is `esp32s3`, the pin
+> map (below) comes from the schematic in [`../hardware/`](../hardware), and the
+> `CONFIG_SPIRAM=y` dependency is gone — the ESP32-S3-WROOM-1-N8 has **no PSRAM**.
+> The earlier bring-up target was the ESP-WROVER-KIT v4.1 (ESP32-WROVER); its
+> GPIOs are retained only as the non-default fallbacks noted in `menuconfig`.
 
 Responsibilities:
 - **TWAI (CAN 2.0)** in **listen-only** mode (Kconfig-selectable to normal/ACK), all
@@ -24,46 +22,47 @@ Responsibilities:
 - Emit a **running operations log** to the serial console — view with `idf.py monitor`
   (booted, filesystem mounted, files listed, next file number, opened file, button
   pressed, recording started/stopped, file closed, drops).
-- Show at-a-glance status on the onboard **red LED die** (GPIO0): slow heartbeat
-  blink when idle/ready, solid on while recording, fast blink on a fatal error
-  (microSD mount/file-open/CAN-start failure). See `status_led.[ch]`.
-
-> The kit's LCD is **not used, and can't be**: its DC (data/command) signal is
-> hardwired to GPIO21, which the WROVER-KIT also routes to the microSD socket's
-> card-detect switch. Confirmed on hardware — a full ST7789/ILI9341 bring-up (no
-> LVGL/BSP, direct `esp_lcd` driver) worked correctly with the card removed, but
-> never updated at all with a card inserted, because the socket's CD contact
-> contends with the LCD's DC line the whole time a card is present. Since the SD
-> card is mission-critical (it's the entire point of this device) and DC has no
-> alternate pin to move to, the LCD is a dead end here.
->
-> The onboard RGB LED's other two legs are also unusable: green (GPIO2) and blue
-> (GPIO4) are the microSD's D0/D1 data lines. Only the red die (GPIO0) is free —
-> it's also the boot-mode strapping pin, but that's sampled once, fresh, at each
-> reset before any of our code runs, so driving it as a normal GPIO output
-> afterward is safe (it's how Espressif's own board wires this exact LED). See
-> *Status LED* in `menuconfig` for the GPIO number and active-low polarity, in
-> case either needs adjusting for your board.
+- Show at-a-glance status on the **status LED** (GPIO18, driving an external panel
+  LED through Q1, a low-side N-FET on the J4 breakout): slow heartbeat blink when
+  idle/ready, solid on while recording, fast blink on a fatal error (microSD
+  mount/file-open/CAN-start failure). See `status_led.[ch]`.
 
 ## Hardware / wiring
 
-The ESP-WROVER-KIT uses most of its GPIOs for the microSD (SDMMC 4-bit), PSRAM and
-console (and the unused LCD); the free pins carry the CAN signals and the button. An
-**external CAN transceiver** (e.g. SN65HVD230, 3.3 V) sits between the ESP and the bus.
+The custom board is built around the **ESP32-S3-WROOM-1-N8** with an **onboard
+TCAN330** CAN transceiver and a microSD wired to the SoC's **native SDMMC host**
+(full 4-bit bus). Pin assignments come straight from the schematic
+([`../hardware/`](../hardware)); unlike the classic ESP32, the ESP32-S3 routes
+SDMMC through the GPIO matrix, so every bus pin is assigned in firmware.
 
-| Signal | Default GPIO | Wiring |
-|--------|:------------:|--------|
-| Start/stop button | **IO33** | Other side to **GND**; internal pull-up, active-low, debounced. |
-| CAN TX | **IO26** | → transceiver **TXD** |
-| CAN RX | **IO27** | ← transceiver **RXD** |
-| — | — | transceiver **CAN-H / CAN-L** → bus; **VCC** 3V3, **GND** common. |
+| Signal | GPIO | Wiring |
+|--------|:----:|--------|
+| Start/stop button (`BTN_SIG`) | **IO6** | J4 breakout; internal pull-up, active-low, debounced. |
+| Status LED | **IO18** | → Q1 gate → external panel LED (J4). Active-high. |
+| CAN TX | **IO21** | → TCAN330 (U2) **TXD** |
+| CAN RX | **IO47** | ← TCAN330 (U2) **RXD** |
+| CAN silent-mode (`S`) | **IO45** | → TCAN330 (U2) pin 8. High = RX-only in HW; driven per listen-only mode. |
+| microSD CLK / CMD | **IO9 / IO10** | J5 SDMMC bus |
+| microSD DAT0–DAT3 | **IO48 / IO3 / IO12 / IO11** | J5 SDMMC 4-bit data |
+| microSD card-detect (`DET_A`) | **IO8** | J5; not used by firmware (no hot-plug path) |
 
-All four (button, TX, RX, bit rate, mode) are configurable under
-*CAN logger configuration* in `menuconfig`. Defaults: **500 kbit/s**, **listen-only**.
+The CAN pins, button, silent-mode pin, SD bus pins, bit rate and mode are all
+configurable under *CAN logger configuration* / *microSD (SDMMC) configuration* /
+*Status LED* in `menuconfig`. Defaults: **500 kbit/s**, **listen-only**.
 
-> These pins are the ones left free by the WROVER-KIT (LCD `5/18/19/21/22/23/25`,
-> microSD `2/4/12/13/14/15`, PSRAM `16/17`, console `1/3`). If you re-pin, keep clear
-> of those.
+> **CAN silent-mode (`S`) pin:** the TCAN330's silent-mode pin is wired to a GPIO
+> so the transceiver can be forced RX-only in hardware, not just via TWAI
+> listen-only. Firmware drives it high in listen-only mode and low otherwise. Its
+> default GPIO45 is an ESP32-S3 strapping pin — sampled only at reset, so driving
+> it afterward is safe, but see [`../hardware/README.md` §5](../hardware/README.md)
+> for the board-level pull-up caveat. Set the pin to `-1` in `menuconfig` on the
+> old external-transceiver bring-up rig, which has no `S` pin wired.
+>
+> **Retired bring-up rig (ESP-WROVER-KIT v4.1):** the earlier target left the CAN
+> signals on IO26/IO27, the button on IO33 and the status LED on GPIO0 (the only
+> free leg of its onboard RGB LED — green/blue were the microSD D0/D1 lines). Its
+> LCD was unusable (DC on GPIO21 contended with the SD card-detect). Those GPIOs
+> survive only as the alternate values documented in each `menuconfig` option.
 
 ## PCAN `.trc` format
 
@@ -97,7 +96,7 @@ software/
     ├── Kconfig.projbuild    button / CAN pins, bit rate, listen-only, queue depth, status LED
     ├── trc_format.[ch]      pure PCAN .trc formatting (host-testable)
     ├── ui_log.[ch]          operations log to the serial console
-    ├── status_led.[ch]      idle/recording/error indicator on the onboard red LED
+    ├── status_led.[ch]      idle/recording/error indicator on the status LED (GPIO18)
     └── logger_main.c        app_main: TWAI, microSD, button, RX + writer tasks
 ```
 
@@ -111,10 +110,10 @@ Requires [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/g
 
 ```bash
 cd logger/software
-idf.py set-target esp32
+idf.py set-target esp32s3
 idf.py menuconfig      # optional: CAN logger configuration (pins, bit rate, mode)
 idf.py build
-idf.py flash monitor   # on the attached ESP-WROVER-KIT; monitor shows the op log
+idf.py flash monitor   # over the board's native USB-C (J2); monitor shows the op log
 ```
 
 The `espressif/button` component is pulled automatically by the component manager on
@@ -124,4 +123,4 @@ first build.
 
 [`.github/workflows/firmware-build.yml`](../../.github/workflows/firmware-build.yml)
 builds this project with the real ESP-IDF toolchain (`espressif/esp-idf-ci-action`,
-target `esp32`) on every push/PR that touches the firmware, confirming it compiles.
+target `esp32s3`) on every push/PR that touches the firmware, confirming it compiles.

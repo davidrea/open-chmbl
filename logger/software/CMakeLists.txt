@@ -1,4 +1,4 @@
-# Top-level project CMakeLists for the CAN data logger (ESP-WROVER-KIT) firmware.
+# Top-level project CMakeLists for the CAN data logger (ESP32-S3) firmware.
 # Standard ESP-IDF project layout — see https://docs.espressif.com/projects/esp-idf
 cmake_minimum_required(VERSION 3.16)
 

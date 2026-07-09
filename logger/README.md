@@ -18,11 +18,10 @@ This board is also the base design the [`transmitter/`](../transmitter) reuses
 - [`hardware/`](hardware) — the custom ESP32-S3 PCB: schematics, connectors, power,
   and a known strapping-pin issue to check before relying on a board. See
   [`hardware/README.md`](hardware/README.md).
-- [`software/`](software) — ESP-IDF firmware. **Currently still targets the retired
-  ESP-WROVER-KIT bring-up hardware (`esp32`)**, not yet ported to the custom board
-  above — see the status note in [`software/README.md`](software/README.md). Pins,
-  wiring, the `.trc` format, and build/flash steps for the current target are
-  documented there.
+- [`software/`](software) — ESP-IDF firmware, targeting the custom **ESP32-S3**
+  board above (`esp32s3`) with the pin map taken from its schematic. Pins, wiring,
+  the `.trc` format, and build/flash steps are documented in
+  [`software/README.md`](software/README.md).
 
 > Listen-only by default — the logger never ACKs or transmits, per the repo's
 > [golden rule](../docs/can-profiles.md#1-golden-rule-listen-only). Power-loss and

@@ -27,7 +27,7 @@
 #include <stdint.h>
 
 /*
- * The ESP-WROVER-KIT has no battery-backed RTC, so absolute wall-clock time is
+ * The logger board has no battery-backed RTC, so absolute wall-clock time is
  * unknown at boot. We emit a fixed, well-formed placeholder $STARTTIME (an OLE
  * automation date — days since 1899-12-30) so readers parse the file cleanly;
  * only the relative time offsets between frames are meaningful, which is exactly
