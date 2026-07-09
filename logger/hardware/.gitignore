@@ -1,0 +1,21 @@
+# KiCad lock files
+~*.lck
+
+# KiCad local project settings (per-user, not shared)
+*.kicad_prl
+
+# Fabrication Toolkit plugin local options
+fabrication-toolkit-options.json
+
+# Fabrication Toolkit output (regenerated from the design)
+production/
+
+# VS Code Local History extension
+.history/
+
+# Ad-hoc restore backups
+_restore_backup_*/
+stash/
+
+# Export archives
+*.zip

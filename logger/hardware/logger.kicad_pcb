@@ -117,7 +117,7 @@
 			(layerselection 0x00000000_00000000_55555555_5755f5ff)
 			(plot_on_all_layers_selection 0x00000000_00000000_00000000_00000000)
 			(disableapertmacros no)
-			(usegerberextensions no)
+			(usegerberextensions yes)
 			(usegerberattributes yes)
 			(usegerberadvancedattributes yes)
 			(creategerberjobfile yes)
@@ -145,7 +145,7 @@
 			(subtractmaskfromsilk no)
 			(outputformat 1)
 			(mirror no)
-			(drillshape 1)
+			(drillshape 0)
 			(scaleselection 1)
 			(outputdirectory "")
 		)
@@ -159,6 +159,7 @@
 		(property "Reference" "SW2"
 			(at 3.646 -0.856 0)
 			(layer "F.SilkS")
+			(hide yes)
 			(uuid "a1eb9526-005b-4f2c-851e-bf37d5f1a1c2")
 			(effects
 				(font
@@ -2785,6 +2786,7 @@
 		(property "Reference" "SW1"
 			(at -0.89 2.344 0)
 			(layer "F.SilkS")
+			(hide yes)
 			(uuid "44996a90-b18a-48a4-a822-a2d8c83085fc")
 			(effects
 				(font
@@ -4016,7 +4018,7 @@
 				(pins "1" "3" "2")
 			)
 		)
-		(attr smd dnp)
+		(attr smd)
 		(duplicate_pad_numbers_are_jumpers no)
 		(fp_line
 			(start -0.76 -1.56)
@@ -11203,6 +11205,7 @@
 		(property "Reference" "R19"
 			(at 0 1.17 90)
 			(layer "B.SilkS")
+			(hide yes)
 			(uuid "362007ed-ff42-46ae-96e2-7b32e917ebe4")
 			(effects
 				(font
@@ -11382,6 +11385,42 @@
 		(fill no)
 		(layer "Edge.Cuts")
 		(uuid "825f8759-5b1f-45df-ad5b-9f8f47f4efcd")
+	)
+	(gr_text "RST"
+		(at 146.7 82.6 0)
+		(layer "F.SilkS")
+		(uuid "b0599f8e-37d2-433a-a855-a53e4671a16c")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "BOOT"
+		(at 131 81.9 90)
+		(layer "F.SilkS")
+		(uuid "c06f2879-0638-4260-bb46-c7957184137c")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "120\nTERM"
+		(at 121.315 81.5 0)
+		(layer "B.SilkS")
+		(uuid "4225af9f-ece2-4e5d-8847-04f3eb4308c1")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+			(justify left bottom mirror)
+		)
 	)
 	(gr_text "3V3 OUT"
 		(at 159.893 96.139 0)
