@@ -51,7 +51,7 @@ above. See [§4](#4-braking-state-machine) for the resulting state machine.
  │  ┌───────────────────┐     │  (2.4 GHz,   │  │  • RX callback      │  │
  │  │ TX unit            │    ))) encrypted, │  │  • state interpret  │  │
  │  │  • CAN transceiver │     │   pre-paired)│  │  • LED pattern eng. │  │
- │  │  • ESP32-C3 (TWAI  │ ─ ─ ─ ─ ─ ─ ─ ─►  │  │  • ambient dimming  │  │
+ │  │  • ESP32-S3 (TWAI  │ ─ ─ ─ ─ ─ ─ ─ ─►  │  │  • ambient dimming  │  │
  │  │    listen-only)    │     │              │  │  • battery monitor  │  │
  │  │  • bike-profile    │     │              │  └─────────┬───────────┘  │
  │  │    decoder         │     │              │            ▼              │
@@ -70,6 +70,11 @@ Two independent units:
 | **`brake_light/`** (helmet-side, "RX") | Mounted on the helmet shell | On-board LiPo, USB-C charge | Receive state, drive the LED bar with the right pattern/brightness, manage battery & link health |
 
 > Throughout these docs "TX" = the `transmitter` unit and "RX" = the `brake_light` unit.
+
+> TX runs an **ESP32-S3** (not the C3 shown for RX above) — the TX hardware plan
+> reuses the [`logger/`](logger) PCB, which needed the S3's SDMMC peripheral for its
+> microSD slot. RX has no SD card and stays on the ESP32-C3. See
+> [`docs/hardware.md §1`](docs/hardware.md#1-transmitter-bike-side).
 
 The TX does all interpretation. The RX is intentionally "dumb": it renders whatever
 discrete state the TX tells it to, plus a couple of local concerns (brightness vs.

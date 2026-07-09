@@ -4,6 +4,15 @@ CAN data-logger firmware for the **ESP-WROVER-KIT v4.1** (ESP32-WROVER, **ESP-ID
 Captures all CAN traffic, no filtering, and writes **PCAN `.trc` (v2.1)** files to the
 on-board microSD.
 
+> **Status:** the project now has a custom PCB — [`../hardware/`](../hardware)
+> (ESP32-S3-WROOM-1, onboard CAN transceiver, native SDMMC microSD) — but this
+> firmware has **not yet been ported to it**. Everything below (target `esp32`, the
+> GPIO table, the WROVER-KIT-specific LCD/SD note) describes the current bring-up
+> hardware only. Porting to the custom board means at minimum: `set-target esp32s3`,
+> a new pin map (see the schematic in `../hardware/`), and dropping the
+> `CONFIG_SPIRAM=y` dependency below — the ESP32-S3-WROOM-1-N8 on the new board has
+> **no PSRAM**.
+
 Responsibilities:
 - **TWAI (CAN 2.0)** in **listen-only** mode (Kconfig-selectable to normal/ACK), all
   IDs accepted — see [`docs/can-profiles.md`](../../docs/can-profiles.md).

@@ -18,7 +18,10 @@ for the message/pairing/failsafe definitions this implements.
 TX-NET-1…5, BL-NET-1…5.
 
 ## 3. Component selection
-ESP32-C3 Wi-Fi radio (ESP-NOW); ESP-IDF `esp_now` + `esp_wifi`. No extra hardware.
+ESP32 Wi-Fi radio (ESP-NOW); ESP-IDF `esp_now` + `esp_wifi`. No extra hardware. Works
+the same on the ESP32-C3 (`brake_light`) and the ESP32-S3 (`transmitter`'s hardware
+plan — see [`hardware.md §1`](../hardware.md#1-transmitter-bike-side)); current
+firmware for both is bench-implemented on ESP32-C3.
 
 ## 4. I/O assignments & configuration
 - Fixed/agreed Wi-Fi channel; STA interface, no AP association.

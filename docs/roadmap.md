@@ -63,6 +63,13 @@ ride-logger (SocketCAN, listen-only) for in-motion signals.
 - Real boards: transmitter (protected 12 V power, listen-only CAN, sleep) and
   brake_light (LiPo, USB-C charge, auto-dim, breakaway mount, IP65 enclosure).
 - Parasitic-draw and runtime measurements vs. targets.
+- **Started early, out of order:** the [`logger/`](../logger) got a real
+  ESP32-S3 PCB ([`logger/hardware/`](../logger/hardware/README.md)) ahead of
+  DE-07/Phase 3, and it's designed to double as the transmitter board (same PCB,
+  microSD + button/LED connectors unpopulated) — see
+  [`hardware.md §1`](hardware.md#1-transmitter-bike-side). Firmware ports (logger →
+  ESP32-S3, transmitter → ESP32-S3) and the transmitter-specific deltas (ignition
+  sense/sleep, automotive-grade power protection, enclosure) are still open.
 - **Exit:** a wearable unit + a plug-in unit that run a full ride on the bench/stand.
 
 ## Phase 5 — Field, polish, generalize
@@ -84,6 +91,7 @@ ride-logger (SocketCAN, listen-only) for in-motion signals.
 | Street Triple support | Same profile or separate? | Separate profile (different platform), but same connector/TX hardware. |
 | Wheel speed as primary input | Use bike wheel-speed for live deceleration? | **Yes — it is now the primary braking input** (no brake bit exists). Stays clear of the inertial-sensing patent — it's CAN data, not an IMU. |
 | Reverse-engineering tools | Bench + ride logging stack? | **Rig A:** PCAN-USB + PCAN-Explorer (listen-only). **Rig B:** Pi/Pi Zero + SocketCAN `candump`/`python-can`; analysis with `cantools`. |
+| Transmitter MCU/board | ESP32-C3 (as originally sketched), or reuse the logger's board? | **Resolved — reuse the [`logger/`](../logger) PCB** (ESP32-S3-WROOM-1 + TCAN330), with the microSD (J5) and button/LED (J4) connectors unpopulated. The S3 was forced by the logger's need for the SDMMC peripheral (the C3 doesn't have one); the transmitter carries it over for board reuse. `brake_light` has no SD card and stays on the C3. Firmware ports for both boards are still pending — see [`hardware.md §1`](hardware.md#1-transmitter-bike-side). |
 | LED array | Addressable (WS2812) vs. discrete red + CC driver? | **Discrete 620–630 nm red**, mid-power 2835/3030 array (~8–12 emitters) on a **boost CC driver (TI LM3410)**, sized to the CHMSL intensity band (~50–80 cd). Photometry/emitter in the [brightness benchmark](led-brightness-benchmark.md); series/boost topology + driver trade study in [DE-04](design/de-04-led-render.md). Addressable RGB too dim per-pixel → status indicator only. |
 | Status indicator | Separate status/fault LED (color + blink codes), independent of the bar? | **Yes** — add it (BL-IND / [DE-10](design/de-10-status-indicator.md)); ideally a module's onboard WS2812. |
 | ESP32-C3 module | Integrated board with onboard WS2812 **and** LiPo charger, or bare module + discretes? | Nice-to-have; pick an integrated one if clean (LOLIN C3 Pico / confirmed FireBeetle 2 C3), else XIAO C3 + external WS2812, or a bare module + both discretes. See [hardware §2.1](hardware.md#21-integrated-module-candidates-ws2812--lipo-charger). |

@@ -23,8 +23,11 @@ exist** (DE-07) so the [bike profile](../can-profiles.md) is known. Strictly
 TX-CAN-1…5, TX-DEC-1…7.
 
 ## 3. Component selection
-ESP32-C3 TWAI controller + SN65HVD230 transceiver — see
-[`hardware.md §1`](../hardware.md#1-transmitter-bike-side).
+ESP32-S3 TWAI controller + TCAN330 transceiver (hardware plan reuses the
+[`logger/`](../../logger) PCB) — see
+[`hardware.md §1`](../hardware.md#1-transmitter-bike-side). Firmware currently still
+targets ESP32-C3 pending the hardware port — see
+[`transmitter/software/README.md`](../../transmitter/software/README.md).
 
 ## 3a. Architecture decision — DBC + generated data table, hand-written extractor
 

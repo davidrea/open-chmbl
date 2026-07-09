@@ -1,7 +1,12 @@
 # Firmware
 
-Both units run on ESP32-C3 using ESP-IDF (chosen for TWAI + ESP-NOW + deep sleep
-control). The two codebases share a small protocol/profile library.
+Both units run **ESP-IDF** (chosen for TWAI + ESP-NOW + deep sleep control), on
+different ESP32 variants: the transmitter's hardware plan moved to **ESP32-S3**
+(reusing the [`logger/`](../logger) PCB — see [`hardware.md §1`](hardware.md#1-transmitter-bike-side)),
+while `brake_light` stays on **ESP32-C3**. The transmitter's firmware currently still
+targets `esp32c3`/`esp32` (see [`transmitter/software/README.md`](../transmitter/software/README.md));
+the port to `esp32s3` is pending. The two codebases share a small protocol/profile
+library.
 
 ```
 transmitter/software/   ← bike-side firmware

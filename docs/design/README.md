@@ -64,15 +64,17 @@ testable in isolation; CAN-dependent elements last, after captures exist). Statu
 | **DE-04** | [LED render & bar driver](de-04-led-render.md) | brake_light | BL-RND-*, BL-LED-* | DE-00 | 🟡 |
 | **DE-05** | Battery & charge management | brake_light | BL-PWR-* | DE-00 | 🔲 |
 | **DE-06** | TX power / sleep / wake | transmitter | TX-PWR-* | DE-00 | 🔲 |
-| **DE-07** | CAN capture & offline analysis — bench (PCAN-USB) + [ride logger](../../logger/) (ESP-WROVER-KIT) | host + [`logger/`](../../logger/) | (enables TX-DEC) | — | 🟡 |
+| **DE-07** | CAN capture & offline analysis — bench (PCAN-USB) + [ride logger](../../logger/) (custom ESP32-S3 PCB) | host + [`logger/`](../../logger/) | (enables TX-DEC) | — | 🟡 |
 | **DE-08** | [Embedded CAN decode](de-08-can-decode.md) | transmitter | TX-CAN-*, TX-DEC-* | DE-00, DE-07 | 🔲 |
 | **DE-09** | [Braking state machine](de-09-brake-decel-logic.md) | transmitter | TX-SM-* | DE-00, DE-08 | 🔲 |
 | **DE-10** | [Status-indicator LED](de-10-status-indicator.md) | brake_light | BL-IND-* | DE-00 | 🔲 |
 
 DE-05…DE-06 don't have stub docs yet; they get one when scheduled. DE-07 is the
 bench/ride reverse-engineering captured in [`can-profiles.md`](../can-profiles.md); the
-**ride-logging half is now a real device** — a self-contained ESP-WROVER-KIT logger
-under [`logger/`](../../logger/) (firmware implemented) that replaces the Raspberry Pi
+**ride-logging half is now a real device** — a self-contained logger under
+[`logger/`](../../logger/) (firmware implemented, now with a
+[custom ESP32-S3 PCB](../../logger/hardware/README.md) — firmware port from the
+original ESP-WROVER-KIT bring-up hardware pending) that replaces the Raspberry Pi
 rig, while the stationary bench captures stay on PCAN-USB + a laptop.
 
 This table is the single source of truth for "what's the next isolated piece."

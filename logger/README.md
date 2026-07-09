@@ -1,23 +1,28 @@
 # logger
 
-A self-contained **CAN data logger** built on an **ESP-WROVER-KIT v4.1** plus an
-external CAN transceiver. It captures **all** bus traffic (no filtering) in
-**listen-only** mode and writes it to the on-board microSD as **PCAN `.trc`** ASCII
-files that drop straight into the project's offline decode/replay path
-(`python-can` + `cantools`, see [`docs/can-profiles.md`](../docs/can-profiles.md)).
+A self-contained **CAN data logger** on a **custom ESP32-S3 PCB** with an onboard CAN
+transceiver. It captures **all** bus traffic (no filtering) in **listen-only** mode
+and writes it to the on-board microSD as **PCAN `.trc`** ASCII files that drop
+straight into the project's offline decode/replay path (`python-can` + `cantools`,
+see [`docs/can-profiles.md`](../docs/can-profiles.md)).
 
 This is the **ride-logging rig** for design element
 [**DE-07**](../docs/design/README.md) — a no-Linux ESP32 alternative to the Raspberry
 Pi originally sketched for capturing wheel-speed and other in-motion signals. The
 stationary bench captures are done separately with PCAN-USB + a laptop.
 
-Unlike the `transmitter/` and `brake_light/` units, this device is built on an
-**off-the-shelf dev kit**, so there is no custom board — hence a **`software/` folder
-only**, no `hardware/`.
+This board is also the base design the [`transmitter/`](../transmitter) reuses
+(same PCB, connectors for the microSD and button/LED removed) — see
+[`hardware/README.md §4`](hardware/README.md#4-shared-design-with-the-transmitter).
 
-- [`software/`](software) — ESP-IDF firmware (target `esp32`). Pins, wiring, the
-  `.trc` format, and build/flash steps are documented in
-  [`software/README.md`](software/README.md).
+- [`hardware/`](hardware) — the custom ESP32-S3 PCB: schematics, connectors, power,
+  and a known strapping-pin issue to check before relying on a board. See
+  [`hardware/README.md`](hardware/README.md).
+- [`software/`](software) — ESP-IDF firmware. **Currently still targets the retired
+  ESP-WROVER-KIT bring-up hardware (`esp32`)**, not yet ported to the custom board
+  above — see the status note in [`software/README.md`](software/README.md). Pins,
+  wiring, the `.trc` format, and build/flash steps for the current target are
+  documented there.
 
 > Listen-only by default — the logger never ACKs or transmits, per the repo's
 > [golden rule](../docs/can-profiles.md#1-golden-rule-listen-only). Power-loss and

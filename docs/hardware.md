@@ -9,30 +9,47 @@ Everything here is a first-pass sketch to size the design — not a finalized BO
 
 Lives at the diagnostic port. Powered from the bike. Read-only on CAN.
 
+**Hardware plan: reuse the [`logger/`](../logger) PCB.** The logger's board
+(ESP32-S3-WROOM-1 + onboard CAN transceiver + protected 12 V/USB-C power, see
+[`logger/hardware/README.md`](../logger/hardware/README.md)) was designed to double
+as the transmitter with its microSD slot (J5) and button/LED breakout (J4) left
+unpopulated — the transmitter needs neither. This supersedes the earlier
+ESP32-C3 + SN65HVD230 sketch below the block diagram; the C3 remains the MCU for
+`brake_light/` (§2), which has no SD card and so doesn't need the S3's SDMMC
+peripheral.
+
+> ⚠️ The logger board has an open strapping-pin issue (a pull-up on the ESP32-S3's
+> `GPIO45` VDD_SPI boot strap) — see
+> [`logger/hardware/README.md §5`](../logger/hardware/README.md#5-known-issue--gpio45s-pin-conflicts-with-a-boot-strap)
+> before building a transmitter board off this design.
+
 ### Block diagram
 
 ```
- Diagnostic  ┌──────────────┐   3.3 V   ┌─────────────┐
- connector   │ Reverse-pol. │──────────▶│  Buck reg.   │──▶ 3V3 rail
-   12 V ─────▶│  + TVS prot. │           │ (12V→3.3V)   │
-   GND  ─────▶└──────────────┘           └─────────────┘
-   CAN-H ─────────────────────┐
-   CAN-L ─────────────────────│──▶ CAN transceiver ──▶ ESP32 TWAI (listen-only)
-                              (SN65HVD230, 3.3 V)        │
-                                                          └─▶ ESP-NOW (2.4 GHz)
+ J3 (bike)                     USB-C (J2)
+ 12 V ──▶┌───────────┐  +5VD  VBUS──▶┌──────────────┐
+ GND ───▶│ Schottky   │──────────────▶│  TPS62172     │──▶ 3V3 rail
+         │ reverse-pol│                │  (buck)       │       │
+ CAN-H ─▶│ + TVS      │                └──────────────┘       │
+ CAN-L ─▶└───────────┘                                          │
+                                                                  ▼
+                              CAN transceiver ──────────▶ ESP32-S3 TWAI
+                              (TCAN330, 3.3 V,             (listen-only)
+                               silent-mode pin)                  │
+                                                                  └─▶ ESP-NOW (2.4 GHz)
 ```
 
-### Parts (sketch)
+### Parts (as reused from the logger board)
 
-| Function | Candidate part | Notes |
+| Function | Part | Notes |
 |----------|---------------|-------|
-| MCU + radio | **ESP32-C3** (or ESP32-S3/WROOM) | Has built-in **TWAI** (CAN 2.0) controller; only a transceiver is needed. C3 is cheap, RISC-V, Wi-Fi/BLE. |
-| CAN transceiver | **SN65HVD230** (3.3 V) | 3.3 V logic, low power, has a silent-mode pin. Avoid 5 V-only transceivers (TJA1050) unless level-shifting. |
-| Power regulation | Automotive-grade **buck** (e.g. TPS54xx), 12 V→3.3 V | Must survive load dumps / 12–14.4 V charging system. Wide-Vin. |
-| Input protection | Reverse-polarity FET + **TVS diode** + fuse | Automotive transients are brutal. |
-| Ignition sense | Tap switched-12 V or detect bus activity | Used to sleep when bike is off (see parasitic draw). |
-| Connector | Bike-specific diagnostic plug | Euro 5 6-pin is common; **verify pinout per bike** — pin assignment is not universal. |
-| Enclosure | Potted/sealed, **IP65+** | Engine bay vibration + weather + heat. |
+| MCU + radio | **ESP32-S3-WROOM-1-N8** | Has built-in **TWAI** (CAN 2.0) controller; only a transceiver is needed. Chosen over the C3 on the logger board for its SDMMC peripheral — not needed here, but the transmitter reuses that same board. |
+| CAN transceiver | **TCAN330** (3.3 V) | 3.3 V logic, silent-mode pin wired to a GPIO for a hardware-level listen-only default (see the GPIO45 caveat above). |
+| Power regulation | **TPS62172** buck, 12 V→3.3 V (via a diode-ORed +5VD rail shared with USB-C) | Not automotive-load-dump-rated in this rev — a Schottky diode handles reverse-polarity, not a FET. Revisit for full-time bike use; fine for bench/prototype. |
+| Input protection | Schottky diode (reverse-pol.) + dual TVS on CAN-H/CAN-L | See [`logger/hardware/README.md §2`](../logger/hardware/README.md#2-power). |
+| Ignition sense | Tap switched-12 V or detect bus activity | Not yet on the logger board — needed for TX-specific sleep behavior (DE-06); would be a board delta from the shared logger design. |
+| Connector | JST-PH 5-pin (J3): CAN-L, CAN-H, +12 V, GND, spare | Board-side connector. Bike-specific diagnostic plug (Euro 5 6-pin is common) still needs its own adapter/harness — **verify pinout per bike**, pin assignment is not universal. |
+| Enclosure | Potted/sealed, **IP65+** | Engine bay vibration + weather + heat. Not designed yet. |
 
 ### Power & parasitic draw
 

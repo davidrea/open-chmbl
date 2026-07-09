@@ -64,12 +64,15 @@ question.
 4. **Record** each as `(can_id, bit offset, length, scale, offset)` and build it up as
    a PCAN-Explorer `.sym`/CANdb so the trace becomes human-readable.
 
-### Rig B — ride logger (ESP-WROVER-KIT, listen-only)
+### Rig B — ride logger (custom ESP32-S3 PCB, listen-only)
 
 Used for **wheel speed** and anything that only exists in motion. A self-contained
-**ESP-WROVER-KIT logger** ([`logger/`](../logger/)) with an external CAN transceiver
-records **timestamped** frames to its on-board microSD during real riding — no Linux to
-babysit. It captures **all** traffic (no filtering) and writes **PCAN `.trc`** files
+**custom logger PCB** ([`logger/`](../logger/), ESP32-S3 + onboard CAN transceiver —
+see [`logger/hardware/README.md`](../logger/hardware/README.md)) records
+**timestamped** frames to its on-board microSD during real riding — no Linux to
+babysit. (Firmware currently still targets the original ESP-WROVER-KIT bring-up
+hardware, not yet ported to the custom PCB — see
+[`logger/software/README.md`](../logger/software/README.md).) It captures **all** traffic (no filtering) and writes **PCAN `.trc`** files
 that replay through `python-can` exactly like the bench captures. (This replaces the
 Raspberry Pi / SocketCAN + `candump` rig originally sketched here.)
 
