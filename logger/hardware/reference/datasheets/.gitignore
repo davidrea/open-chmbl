@@ -1,0 +1,3 @@
+# Datasheets are downloaded locally for hardware reference.  Use README.md for
+# the source index; do not commit vendor PDFs to this repository.
+*.pdf

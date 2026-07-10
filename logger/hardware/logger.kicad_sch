@@ -6,6 +6,8 @@
 	(paper "A4")
 	(title_block
 		(title "CAN Logger")
+		(date "2026-07-09")
+		(rev "A")
 		(company "open-chmbl")
 	)
 	(lib_symbols
