@@ -585,14 +585,20 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
         # timeline strip chart
         with dpg.plot(height=200, width=-1, tag="timeline",
                       no_menus=True):
+            dpg.add_plot_legend()
             dpg.add_plot_axis(dpg.mvXAxis, label="time (s)", tag="tl_x")
             with dpg.plot_axis(dpg.mvYAxis, label="speed (mph)", tag="tl_y"):
                 dpg.add_line_series(list(grid), list(log.speed_mph),
                                     label="speed", tag="speed_series")
-            with dpg.plot_axis(dpg.mvYAxis2, label="brake", tag="tl_y2"):
+            with dpg.plot_axis(dpg.mvYAxis2, label="brake / throttle",
+                               tag="tl_y2"):
                 on = (cur["arr"] != OFF).astype(float)
                 dpg.add_line_series(list(grid), list(on), label="brake on",
                                     tag="brake_series", parent="tl_y2")
+                dpg.add_line_series(list(grid),
+                                    list(log.throttle_pct / 100.0),
+                                    label="throttle", tag="throttle_series",
+                                    parent="tl_y2")
             dpg.set_axis_limits("tl_y2", -0.05, 1.2)
             dpg.add_drag_line(tag="scrub_line", color=WARN, default_value=0.0,
                               vertical=True, callback=on_seek_cursor)
@@ -687,7 +693,7 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
         set_accel_bar(ac, tun.decel_on_mphps)
         dpg.set_value("throttle_bar", max(0.0, min(1.0, thr / 100.0)))
         dpg.configure_item("throttle_bar", overlay=f"{thr:.0f} %")
-        dpg.set_value("clutch_val", f"clutch: {'PULLED' if cl else 'released'}")
+        dpg.set_value("clutch_val", f"clutch: {'IN' if cl else 'OUT'}")
         dpg.set_value("cutoff_val",
                       f"engine cutoff: {'YES' if cut else 'no'}")
         dpg.set_value("accel_val",
