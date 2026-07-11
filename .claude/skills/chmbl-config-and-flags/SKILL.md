@@ -149,6 +149,10 @@ tunables live in two places: the design doc (the spec) and the calibration bench
 tool (executable). Implementing them in firmware is the `chmbl-de09-campaign` skill's
 subject — do not "fix" this gap casually.
 
+> **Canonical home.** §3.1–3.2 are the library's single source of truth for the
+> FSM tunables (doc defaults AND trc_viz bench defaults). Sibling skills carry
+> excerpts; update here first when either side changes.
+
 ### 3.1 The spec: `tx_config_t` in `docs/firmware.md` §1 "Config"
 
 Speeds in MPH, accelerations in MPH/s. Design-doc defaults:
@@ -206,7 +210,7 @@ the chosen values must be written back into `docs/firmware.md` in the same chang
 | `CAN_DECODE_STALE_MS` | 1000 | Signal staleness cutoff. |
 | `CAN_DECODE_ACCEL_WINDOW_MS` | 200 | Regression window for deriving acceleration from wheel speed. |
 | `CAN_DECODE_ACCEL_ALPHA` | 0.3 | Accel smoothing factor. |
-| `CAN_DECODE_SPEED_HIST` | 16 | **KNOWN LIVE BUG**: wheel speed arrives ~100 Hz, so 16 samples span ~150 ms < the 200 ms window — derived accel freezes. trc_viz uses 32 (see its header note, ~line 49). Sizing law: `hist ≥ window_ms × frame_rate`. **The fix is reserved for the DE-09 campaign** (`chmbl-de09-campaign`); don't patch it in an unrelated change. |
+| `CAN_DECODE_SPEED_HIST` | 16 | **KNOWN LIVE BUG**: wheel speed arrives ~100 Hz, so 16 samples span ~150 ms < the 200 ms window — derived accel freezes. trc_viz uses 32 (see its header note, ~line 49). Sizing law: `hist ≥ window_ms × frame_rate` (canonical statement: `chmbl-de09-campaign` Phase 1). **The fix is reserved for the DE-09 campaign**; don't patch it in an unrelated change. |
 | `KMH_TO_MPH` | 0.621371 | Unit conversion. |
 
 ---

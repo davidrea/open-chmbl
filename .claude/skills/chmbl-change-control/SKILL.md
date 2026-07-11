@@ -53,7 +53,7 @@ Classify every change into exactly one primary class and satisfy its full row:
 | **Docs-only** | Fix wording in `docs/firmware.md`; add a DE doc; update a status emoji | **None run** (docs paths don't trigger CI) — gate is human review | The doc *is* the change; keep `docs/design/README.md` §3 status table consistent | No — but a doc that changes specified behavior obligates a follow-up code change (see §2a) |
 | **Design-element implementation** | Implementing DE-02 auto-brightness; adding a firmware task | Full 5-row `build` matrix (both targets for the touched firmware) | The element's `docs/design/de-*.md` (I/O, tasks, CLI hooks) and the status table in `docs/design/README.md` §3 | Yes — the DE doc's **§7 Isolation acceptance** demonstrated via the serial CLI before the element is called done |
 | **Decode / profile change** | Editing `profiles/triumph_tr.dbc`; changing `tools/gen_profile.py`; touching `transmitter/software/main/can_decode.c/.h` | `can-decode-golden` (staleness diff + host harness build + golden_check) **plus** the transmitter build rows | `docs/can-profiles.md` §5 decode table, and `docs/design/de-08-can-decode.md` if the architecture moves | Yes — golden_check over `logger/40mph_drive_cycle.trc` is mandatory and automated; a DBC edit also needs its empirical justification recorded in can-profiles.md |
-| **FSM-tunable change** | Changing `DECEL_ON_MPHPS`, `DECEL_ON_DEBOUNCE_MS`, `STATE_MIN_DWELL_MS`, etc. | Transmitter build rows once DE-09 is in firmware (as of 2026-07-07 the FSM is design-only, status 🔲 — tunables live in the `docs/firmware.md` table and in `tools/trc_viz.py`) | The tunables table in `docs/firmware.md` — value AND rationale | Yes — a before/after replay metric on the committed capture (e.g. transition count / sub-0.5 s blip count from `uv run tools/trc_viz.py logger/40mph_drive_cycle.trc --headless-check`); precedent: hysteresis cut transitions 162→48, debounce cut 48→30 |
+| **FSM-tunable change** | Changing `DECEL_ON_MPHPS`, `DECEL_ON_DEBOUNCE_MS`, `STATE_MIN_DWELL_MS`, etc. | Transmitter build rows once DE-09 is in firmware (as of 2026-07-07 the FSM is design-only, status 🔲 — tunables live in the `docs/firmware.md` table and in `tools/trc_viz.py`) | The tunables table in `docs/firmware.md` — value AND rationale | Yes — a before/after replay metric on the committed capture (transition count from `uv run tools/trc_viz.py logger/40mph_drive_cycle.trc --headless-check`; sub-0.5 s blip count from the `fsm_metrics.py` script shipped with `chmbl-diagnostics-and-tooling` — headless-check does not print blips); precedent: hysteresis cut transitions 162→48, debounce cut 48→30 (historical figures; operative gate owned by `chmbl-de09-campaign` Phase 4) |
 | **Tooling change** | Editing `tools/gen_profile.py`, `tools/golden_check.py`, `tools/trc_viz.py`, `tools/requirements.txt` | Everything — `tools/**` is in the CI path filter, so the 5-row matrix AND `can-decode-golden` run | `docs/cli.md` / the tool's own doc section if flags or behavior change | Yes if the tool produces evidence others rely on: golden_check must still pass; gen_profile output must still diff-match the committed profile |
 | **CI change** | Editing `.github/workflows/firmware-build.yml` | All jobs (the workflow file is in its own trigger paths) | A note in the relevant doc if a gate is added/renamed; **never remove a gate or matrix row without a doc explaining why** | N/A — but a CI change that weakens a gate is itself a change-control violation absent written rationale |
 
@@ -120,7 +120,10 @@ dependency without this kind of study should be sent back.
 ## 3. Safety non-negotiables as change-control gates
 
 Each of these is a **merge blocker**. Source of record: `docs/safety-regulatory.md`.
-For each: what it is, WHY, and what kind of change would violate it.
+For each: what it is, WHY, and what kind of change would violate it. (The same
+rules appear as design-review invariants in `chmbl-architecture-contract` §3 —
+if you amend a rule here, update the matching invariant there in the same
+change, and vice versa.)
 
 | Gate | Rule | Why (rationale) | A change that VIOLATES it |
 |---|---|---|---|

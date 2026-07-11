@@ -301,7 +301,9 @@ trc_viz's:**
 (trc_viz marks its divergent four as "open — default" bench values. Docs are the spec:
 the firmware defaults come from the firmware.md table. Whenever you compare against
 trc_viz, pass the doc values explicitly as CLI flags — every tunable is a flag, e.g.
-`--decel-on-mphps 3.0`.)
+`--decel-on-mphps 3.0`. Canonical doc-vs-bench tunables catalog:
+`chmbl-config-and-flags` §3 — if a value here disagrees with it, that catalog +
+`docs/firmware.md` win.)
 
 **Semantics you must reproduce from `run_fsm` (trc_viz.py lines 277–344) — each of
 these is a known correctness trap:**
@@ -425,7 +427,8 @@ runs.
    Rework `cmd_state.c` so the FSM drives the published state in `auto` mode and the
    CLI can still force it.
 3. **CLI hooks — what exists vs must be added** (verified against `cmd_sig.c` /
-   `cmd_state.c` 2026-07-08):
+   `cmd_state.c` 2026-07-08; canonical implemented-vs-spec inventory:
+   `chmbl-run-and-operate` §2 — update it when Phase 5 adds commands):
 
    | docs/cli.md §3 command | Status |
    |---|---|

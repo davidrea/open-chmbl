@@ -199,7 +199,8 @@ exists. Status of each element lives in the docs/design/README.md §3 table.
 
 Three firmwares, two chip targets (verified against `sdkconfig.defaults.*`
 files and `.github/workflows/firmware-build.yml`, a 5-row build matrix on
-ESP-IDF release-v5.3):
+ESP-IDF release-v5.3; the canonical matrix table lives in
+`chmbl-build-and-env` — update there first if a row is added):
 
 | Firmware | esp32c3 (product) | esp32 classic (interim dev hw) |
 |----------|-------------------|-------------------------------|
@@ -235,10 +236,21 @@ heartbeat rate, or LED render loop must re-check this budget:
 | RX render → LED update (60 Hz) | ≤ ~16 ms |
 | **Brake event → LED, total** | **≤ ~100 ms target** |
 
-(The 120 ms decel-on debounce is deliberate detection-side delay before the
-"brake event" exists, distinct from this transport/render budget.)
+> ⚠️ **Open, unreconciled tension:** the 120 ms decel-on debounce alone exceeds
+> the 100 ms total target if "brake event" is read as "deceleration begins."
+> One reading treats the debounce as detection-side delay *before* the brake
+> event exists (excluded from this transport/render budget); the other reads
+> the budget end-to-end from physical decel onset (blown by design). The docs
+> of record do not settle which reading is intended — do not silently pick one.
+> See `chmbl-proof-and-analysis-toolkit` Recipe 6a for the arithmetic and
+> `chmbl-research-frontier` §5 (latency measurement) for the resolution path;
+> settling it is a docs-of-record change that goes through
+> `chmbl-change-control`.
 
 ## 3. Invariant checklist (test every structural change against this)
+
+(Items 1, 2, 5, 8, 9, 15, 16 mirror the merge-blocker gate table in
+`chmbl-change-control` §3 — amend both together.)
 
 1. TWAI is configured `TWAI_MODE_LISTEN_ONLY` on the transmitter; no code path
    transmits or ACKs on the motorcycle CAN bus. (Logger may leave listen-only
@@ -268,9 +280,12 @@ heartbeat rate, or LED render loop must re-check this budget:
 13. FSM behavior changes go through the tunables table, not hard-coded logic,
     and update docs/firmware.md + DE-09 in the same change (docs are the spec).
 14. The 100 ms brake-event→LED budget (§2.9) still holds after any rate/window
-    change.
-15. Pairing keys persist in NVS; re-pairing is an explicit user action (a
-    stranger's TX must not drive your helmet light).
+    change (subject to the open debounce-vs-budget reading noted in §2.9).
+15. The paired peer MAC persists in NVS; re-pairing is an explicit user action
+    (a stranger's TX must not drive your helmet light). Note: as of 2026-07-08
+    only the 6-byte peer MAC is NVS-persisted — the ESP-NOW PMK/LMK are
+    compiled-in development placeholders, not production-secure secrets (see
+    `chmbl-config-and-flags` §7.2 and `chmbl-can-reference` §6).
 16. The helmet mount is non-penetrating; nothing in firmware or docs may
     assume drilling a helmet.
 17. Parasitic draw < 1 mA parked (TX sleeps when the bike is off) — planned
@@ -284,7 +299,8 @@ heartbeat rate, or LED render loop must re-check this budget:
   than the 200 ms `CAN_DECODE_ACCEL_WINDOW_MS`. The ring buffer never spans the
   slope window and the derived acceleration can freeze. Documented in the
   `tools/trc_viz.py` header, which uses 32. Sizing law: `hist ≥ window_ms ×
-  frame_rate`. The fix is reserved for the DE-09 campaign — see
+  frame_rate` (canonical full statement + measured rates: `chmbl-de09-campaign`
+  Phase 1). The fix is reserved for the DE-09 campaign — see
   `chmbl-de09-campaign` before touching it.
 - **DE-09 is designed but NOT implemented.** `transmitter/software/state_machine/
   brake_fsm.sm` and `tools/smc/Smc.jar` are described in docs/firmware.md §4 and
@@ -295,12 +311,10 @@ heartbeat rate, or LED render loop must re-check this budget:
   evidence trail) comes from dry-runs against a single ~220 s capture,
   `logger/40mph_drive_cycle.trc`. No rain, no passenger, no other bike, no
   second rider. Treat the defaults as a starting point, not validated values.
-- **Decode table is single-bike empirical with approximate scales.** The
-  IDs/scales in docs/can-profiles.md §5 were reverse-engineered from one Speed
-  400, not Triumph documentation; the wheel-speed `/16 → km/h` and both rpm
-  scales are calibrated against the ride's known envelope and are approximate
-  (the FSM only needs the *shape* of wheel_speed). Front/rear assignment of the
-  two `0x102` fields is suspected, not confirmed.
+- **Decode table is single-bike empirical with approximate scales.** Owned in
+  full — table and confidence caveats — by docs/can-profiles.md §5 (skill home:
+  `chmbl-can-reference` §5). Headline caveats: scales calibrated against one
+  ride's envelope; front/rear `0x102` assignment suspected, not confirmed.
 - **Missing bench captures.** docs/can-profiles.md cites `logger/throttle.trc`
   and `logger/wheel.trc` as cross-checks — they are not committed. Only
   `40mph_drive_cycle.trc` is in-repo, so parts of the decode derivation are not

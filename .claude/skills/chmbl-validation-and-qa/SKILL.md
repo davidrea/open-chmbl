@@ -36,6 +36,14 @@ Rules:
   120 ms decel-on debounce further cut transitions **48 → 30** (blips 8 → 3) with
   on-time essentially unchanged. Every clause there names the capture and quantifies
   the effect. Match that pattern.
+  > ⚠️ **Caveat (2026-07-08):** those doc-recorded absolute numbers (162/48/30
+  > transitions, 65/8/3 blips) are **historical** — they came from an earlier
+  > version of the replay tool and are **not reproducible from today's
+  > `trc_viz.py`** (current measurements: 29 transitions / 1 blip at tool
+  > defaults; ~27 at doc tunables with `--speed-smooth-ms 0`). Cite them as the
+  > evidence *pattern*, not as an operative gate — the operative DE-09 numeric
+  > gate is owned by `chmbl-de09-campaign` Phase 4. Do not reject a correct
+  > DE-09 port for measuring 27–29 transitions instead of 30.
 - **Eyeballing the `trc_viz` dashboard is exploration, not evidence.** The GUI is a
   calibration bench for forming hypotheses; the numbers that back a claim come from
   its headless replay or from `golden_check.py`. (Note, verified in code as of
@@ -223,8 +231,10 @@ style, `docs/design/de-09-brake-decel-logic.md` §7 for a stimulus→state style
   threshold is *re-derived* — with written rationale, as its own reviewed change —
   before a re-run.
 - **Changes to accepted baselines go through change control.** The golden tolerances
-  (REL 1e-4 / ABS 1e-3 in `tools/golden_check.py`), the DE-09 accepted dry-run numbers
-  (162→48, 48→30), the FSM tunable defaults in `docs/firmware.md`, and each DE's §7
+  (REL 1e-4 / ABS 1e-3 in `tools/golden_check.py`), the DE-09 dry-run *relative
+  improvements* recorded in the docs (162→48, 48→30 — historical figures; the
+  operative replayable gate lives in `chmbl-de09-campaign` Phase 4, see the
+  caveat in §1), the FSM tunable defaults in `docs/firmware.md`, and each DE's §7
   criteria are accepted baselines. Loosening any of them requires the trade-off to be
   written into the corresponding doc of record **in the same change** as the
   code/config edit (docs-are-spec). No skill or shortcut routes around this — see

@@ -1,6 +1,6 @@
 ---
 name: chmbl-research-frontier
-description: Load when deciding WHAT to work on next in open-chmbl, when asked "what are the open problems", when planning a new campaign/ride/bench session, or when evaluating whether a proposed effort actually advances the project. Lists the ranked open problems toward a complete, buildable, legally-careful open product — for each, why the current state falls short, the repo asset to build on, the first three concrete steps, and a falsifiable milestone. Do NOT load for executing the DE-09 firmware work itself (chmbl-de09-campaign), for how to run tools or hardware (chmbl-run-and-operate, chmbl-diagnostics-and-tooling), for what counts as evidence (chmbl-validation-and-qa), or for re-litigating settled dead ends (chmbl-failure-archaeology).
+description: Load when deciding WHAT to work on next in open-chmbl, when asked "what are the open problems", when planning a new campaign/ride/bench session, when adding a NEW BIKE or a new bike profile (record → decode → validate; a short pointer section routes the DBC → gen_profile → golden pipeline), or when evaluating whether a proposed effort actually advances the project. Lists the ranked open problems toward a complete, buildable, legally-careful open product — for each, why the current state falls short, the repo asset to build on, the first three concrete steps, and a falsifiable milestone. Do NOT load for executing the DE-09 firmware work itself (chmbl-de09-campaign), for how to run tools or hardware (chmbl-run-and-operate, chmbl-diagnostics-and-tooling), for what counts as evidence (chmbl-validation-and-qa), or for re-litigating settled dead ends (chmbl-failure-archaeology).
 ---
 
 # Research frontier: open problems toward a buildable open product
@@ -59,6 +59,25 @@ Items 1→5 are roughly sequential by dependency: firmware FSM (1) before latenc
 can be measured end-to-end (5); corpus (2) and Scrambler ride (3) need only the
 existing logger and can run in parallel with anything.
 
+### Adding a bike profile (quick route)
+
+If the task is "add a new bike" / "make a profile for bike X", the end-to-end
+workflow already lives on this frontier — do not invent a new one:
+
+1. **Capture** a stand session + ride with the existing logger
+   (`chmbl-run-and-operate`), anonymize, commit under `logger/`.
+2. **Reverse-engineer** the signal map per `docs/can-profiles.md` §3–4, with
+   `chmbl-proof-and-analysis-toolkit` for the identification proofs and
+   `chmbl-can-reference` for DBC/bit-ordering theory.
+3. **Author the DBC → generate → validate**: write `profiles/<bike>.dbc` as
+   ground truth, generate the C table with `tools/gen_profile.py` (never
+   hand-edit the generated file), and gate with
+   `tools/golden_check.py --dbc profiles/<bike>.dbc --trc logger/<capture>.trc`.
+
+A TR-series sibling (Scrambler 400 X, same expected profile) is item 3; a new
+platform (own DBC, e.g. Street Triple 765) is item 8. Both give the exact
+commands and falsifiable milestones.
+
 ---
 
 ## 1. DE-09: the braking FSM does not exist in firmware yet [COMPLETION]
@@ -78,8 +97,11 @@ expected numbers at every gate is the dedicated sibling skill
 **`chmbl-de09-campaign`**. Load that.
 
 **You have a result when:** the firmware FSM, fed the replayed 40 mph ride,
-reproduces the offline transition/blip counts (30 transitions, 3 sub-0.5 s blips
-at the documented tunables) — the campaign skill owns the exact gates.
+reproduces the reference implementation's replay metrics under matching
+conditions — the numeric gate is owned entirely by `chmbl-de09-campaign`
+Phase 4 (do NOT use the historical doc figures "30 transitions / 3 blips" as
+the target; they are provenance from an earlier tool version and no current
+run reproduces them).
 
 ---
 
@@ -117,7 +139,10 @@ run two commands.
    stats printer, not a gate).
 2. Record ≥3 rides spanning the three classes with the existing logger
    (field procedure in `chmbl-run-and-operate`), copy `N.trc` files off the
-   microSD, and commit them under `logger/` (the committed-capture home —
+   microSD, **anonymize them** (mandatory before commit, per
+   `docs/can-profiles.md` §3 step 6 and `chmbl-external-positioning` §4:
+   strip VIN/serial diagnostic responses, GPS metadata, identifying
+   dates/places), and commit them under `logger/` (the committed-capture home —
    `docs/can-profiles.md` line ~275 says `transmitter/software/captures/`, but
    that directory does not exist; committed captures actually live in `logger/`.
    Fix the doc or the location in the same change, per `chmbl-change-control`).
@@ -155,8 +180,9 @@ offline pipeline — `profiles/triumph_tr.dbc` → `tools/golden_check.py` →
 
 **First three steps (in this repo):**
 1. Record one Scrambler 400 X ride (ignition on → a few stops and launches →
-   ignition off) with the existing logger; commit it as
-   `logger/scrambler_400x_<desc>.trc`.
+   ignition off) with the existing logger; anonymize it (mandatory —
+   `docs/can-profiles.md` §3 step 6 / `chmbl-external-positioning` §4), then
+   commit it as `logger/scrambler_400x_<desc>.trc`.
 2. Run the golden decode against the *unchanged* Speed 400 profile:
    `python3 tools/golden_check.py --trc logger/scrambler_400x_<desc>.trc`
    (defaults already point at `profiles/triumph_tr.dbc` and the host harness —
@@ -287,7 +313,9 @@ verification is a one-command golden replay.
 1. Recapture on the stand with the logger: one recording sweeping the throttle
    0→100→0 (engine off, ignition on — ride-by-wire publishes it), one recording
    spinning the front wheel by hand. Field procedure: `chmbl-run-and-operate`.
-2. Commit them at the exact cited paths — `logger/throttle.trc` and
+2. Anonymize both captures (mandatory before commit — `docs/can-profiles.md`
+   §3 step 6 / `chmbl-external-positioning` §4), then commit them at the
+   exact cited paths — `logger/throttle.trc` and
    `logger/wheel.trc` — so the existing links in `docs/can-profiles.md` §5
    resolve; note in the doc that these are recaptures (date-stamp them).
 3. Verify each replays cleanly through the golden pipeline:
@@ -379,6 +407,8 @@ the 765's connector, so step one is pure capture + reverse engineering.
 
 **First three steps (in this repo):**
 1. Capture: record a 765 stand session + one ride with the existing logger;
+   anonymize (mandatory — `docs/can-profiles.md` §3 step 6 /
+   `chmbl-external-positioning` §4), then
    commit under `logger/`. Reverse-engineer the signal map per the methodology
    in `docs/can-profiles.md` §3–4 (and `chmbl-proof-and-analysis-toolkit` for
    the identification proofs) — expect different IDs/scalings; nothing from the

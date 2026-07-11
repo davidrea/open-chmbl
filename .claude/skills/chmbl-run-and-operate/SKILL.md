@@ -77,6 +77,11 @@ Build/toolchain setup, targets, and CI build matrix are owned by
 
 ## 2. Developer CLI — implemented vs. specified
 
+> **Canonical home.** This section is the library's single source of truth for
+> "which CLI commands exist in firmware vs. docs/cli.md spec". Sibling skills
+> carry only excerpts — when a `cmd_*.c` changes, update THIS table first, then
+> the pointers.
+
 docs/cli.md is the **spec** (target state, source-override model, full grammar).
 The firmware implements a subset. Per project doctrine, docs are the spec and code
 follows — the gap below is expected staging, not divergence to "fix" silently

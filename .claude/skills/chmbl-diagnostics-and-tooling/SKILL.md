@@ -78,7 +78,9 @@ uv run tools/trc_viz.py <capture.trc> [flags]
 
 **Every `BrakeTunables` field is auto-generated as a flag** (underscores →
 hyphens). You do NOT need a wrapper to sweep tunables headlessly. The eleven
-flags and their *bench defaults*:
+flags and their *bench defaults* (canonical doc-vs-bench tunables catalog:
+`chmbl-config-and-flags` §3 — this table documents the FLAGS; if values
+disagree, that catalog wins):
 
 | Flag | Bench default | docs/firmware.md default |
 |---|---|---|
@@ -144,8 +146,10 @@ Line-by-line interpretation:
 
 ### 2.3 The reference numbers (what "good" looks like)
 
-Accepted DE-09 dry-run baselines, recorded in `docs/firmware.md` (history: commit
-`8192663`), all on `logger/40mph_drive_cycle.trc`:
+DE-09 dry-run baselines recorded in `docs/firmware.md` (history: commit
+`8192663`), all on `logger/40mph_drive_cycle.trc`. **Historical figures** from an
+earlier tool version — today's tool measures 29 transitions / 1 blip at defaults;
+the operative DE-09 gate is owned by `chmbl-de09-campaign` Phase 4:
 
 | Mechanism added | FSM transitions | sub-0.5 s blips |
 |---|---|---|
@@ -339,8 +343,10 @@ diagnostics only — `golden_check.py` does not compare them.
 
 The `chmbl>` shell (ESP-IDF `esp_console` REPL over USB Serial/JTAG on
 ESP32-C3, UART0 on classic ESP32; attach mechanics: `chmbl-run-and-operate`).
-**`docs/cli.md` is a spec that is only partially implemented.** Verified against
-the registered commands in `*/software/main/cmd_*.c` + `console.c`, 2026-07-08:
+**`docs/cli.md` is a spec that is only partially implemented.** The canonical
+implemented-vs-spec inventory lives in `chmbl-run-and-operate` §2 — the excerpt
+below covers only the diagnostic read-out commands this skill interprets
+(verified against `*/software/main/cmd_*.c` + `console.c`, 2026-07-08):
 
 **Transmitter — implemented:** `help`, `id`, `state`, `pair`, `net`, `can`, `sig`.
 **Brake_light — implemented:** `help`, `id`, `light`, `pair`, `link`.
