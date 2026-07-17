@@ -5716,12 +5716,6 @@
 		(uuid "1281006a-3786-4852-bc0f-6827c601661c")
 	)
 	(junction
-		(at 69.85 106.68)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "2270cf73-6dca-4043-b1bd-16ce0534736e")
-	)
-	(junction
 		(at 201.93 132.08)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5920,6 +5914,12 @@
 		(uuid "e9fb91e4-0047-4e6c-8b70-34bdde0610a7")
 	)
 	(junction
+		(at 69.85 129.54)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "f43a478d-e526-4bdf-80af-25f200277db6")
+	)
+	(junction
 		(at 152.4 124.46)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5950,6 +5950,16 @@
 			(type default)
 		)
 		(uuid "00dee666-fb7b-4139-a395-7d3be4684980")
+	)
+	(wire
+		(pts
+			(xy 69.85 129.54) (xy 69.85 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0273d218-1260-4a22-9bf1-3661a1bcb44b")
 	)
 	(wire
 		(pts
@@ -6060,6 +6070,16 @@
 			(type default)
 		)
 		(uuid "12611d8c-356c-4b15-af91-60fff524a91f")
+	)
+	(wire
+		(pts
+			(xy 130.81 148.59) (xy 130.81 88.9)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "130c3616-9c11-4092-bf11-7c32e0c6ac82")
 	)
 	(wire
 		(pts
@@ -6193,6 +6213,16 @@
 	)
 	(wire
 		(pts
+			(xy 69.85 129.54) (xy 90.17 129.54)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1defc83e-a7d8-455a-8051-1df2ca500471")
+	)
+	(wire
+		(pts
 			(xy 172.72 107.95) (xy 172.72 91.44)
 		)
 		(stroke
@@ -6230,16 +6260,6 @@
 			(type default)
 		)
 		(uuid "25192185-0c7e-4e97-8b6f-ee49b2503b0e")
-	)
-	(wire
-		(pts
-			(xy 86.36 96.52) (xy 95.25 96.52)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "277f913c-2dc2-4e2c-bbc8-6a2bd46e1ec3")
 	)
 	(wire
 		(pts
@@ -6380,16 +6400,6 @@
 			(type default)
 		)
 		(uuid "3c180790-6004-431c-9195-39dee6bcebdd")
-	)
-	(wire
-		(pts
-			(xy 69.85 100.33) (xy 69.85 106.68)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "3c27302b-e185-4711-bd18-794d97941ec0")
 	)
 	(wire
 		(pts
@@ -6591,6 +6601,16 @@
 		)
 		(uuid "4b4ff602-9a11-45f4-9214-3d145379b961")
 	)
+	(wire
+		(pts
+			(xy 90.17 148.59) (xy 130.81 148.59)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4b9817dc-06e8-47b9-97da-44e99f85a555")
+	)
 	(polyline
 		(pts
 			(xy 228.6 126.746) (xy 243.205 126.746)
@@ -6713,7 +6733,7 @@
 	)
 	(wire
 		(pts
-			(xy 69.85 106.68) (xy 69.85 137.16)
+			(xy 69.85 100.33) (xy 69.85 129.54)
 		)
 		(stroke
 			(width 0)
@@ -6780,6 +6800,16 @@
 			(type default)
 		)
 		(uuid "64c52614-40f4-42bb-b174-e5de18677524")
+	)
+	(wire
+		(pts
+			(xy 90.17 129.54) (xy 90.17 148.59)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "68b35b65-318c-4902-8594-969ead1dd553")
 	)
 	(wire
 		(pts
@@ -6870,6 +6900,16 @@
 			(type default)
 		)
 		(uuid "7076f434-b4cc-416e-b8a4-fe5aa16843d4")
+	)
+	(wire
+		(pts
+			(xy 130.81 88.9) (xy 125.73 88.9)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "71c11036-5e1d-45e1-99b3-453ff1f0aba4")
 	)
 	(wire
 		(pts
@@ -7100,16 +7140,6 @@
 			(type default)
 		)
 		(uuid "88bf9dc6-2ae7-4b2b-80d2-9e303a15695b")
-	)
-	(wire
-		(pts
-			(xy 86.36 106.68) (xy 86.36 96.52)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "89f58a5f-9206-43b1-af00-39febe197699")
 	)
 	(wire
 		(pts
@@ -7950,16 +7980,6 @@
 			(type default)
 		)
 		(uuid "f1a99807-3d12-4d37-be8b-e8ee988fe0da")
-	)
-	(wire
-		(pts
-			(xy 69.85 106.68) (xy 86.36 106.68)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "f2fd7216-6594-462f-9f04-b6a8c79eb1c9")
 	)
 	(wire
 		(pts
@@ -13455,7 +13475,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7519"
+		(property "LCSC" "C15999"
 			(at 123.19 62.23 0)
 			(hide yes)
 			(show_name no)
@@ -14716,7 +14736,7 @@
 		(dnp no)
 		(uuid "d25af727-facb-46b4-8402-852a0d090cd9")
 		(property "Reference" "U1"
-			(at 114.554 134.112 0)
+			(at 97.536 79.756 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -14726,8 +14746,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "ESP32-S3-WROOM-1-N8"
-			(at 114.554 136.652 0)
+		(property "Value" "ESP32-S3-WROOM-1-N4"
+			(at 83.566 77.47 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -14770,7 +14790,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C2913198"
+		(property "LCSC" "C2913197"
 			(at 110.49 106.68 0)
 			(hide yes)
 			(show_name no)
