@@ -2263,7 +2263,7 @@
 				)
 			)
 		)
-		(property "Value" "TPS62172DSG"
+		(property "Value" "TPS62162DSGR"
 			(at 0.01 2.14 90)
 			(layer "F.Fab")
 			(uuid "be13e951-7907-40ad-9403-f880789e5b11")
@@ -2300,7 +2300,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C59873"
+		(property "LCSC" "C40256"
 			(at 0 0 270)
 			(unlocked yes)
 			(layer "F.Fab")
