@@ -60,7 +60,7 @@
           "hatch_smoothing_level": 0,
           "hatch_smoothing_value": 0.1,
           "hatch_thickness": 1.0,
-          "min_clearance": 0.3,
+          "min_clearance": 0.2,
           "min_island_area": 10.0,
           "min_thickness": 0.25,
           "pad_connection": 1,
@@ -681,6 +681,12 @@
           "label": "LCSC Part #",
           "name": "LCSC",
           "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Sim.Pins",
+          "name": "Sim.Pins",
+          "show": false
         }
       ],
       "filter_string": "",
@@ -731,7 +737,7 @@
         "uuid": "1dd1bfd8-f8e9-44a7-86f7-1189d1a29b26"
       }
     ],
-    "used_designators": "R19",
+    "used_designators": "#PWR41-42,D5-6,R19-21",
     "variants": []
   },
   "sheets": [
