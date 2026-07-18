@@ -30,27 +30,18 @@ This board is also the base design the [`transmitter/`](../transmitter) reuses
 
 ## Visualizing a log
 
-[`tools/trc_viz.py`](../tools/trc_viz.py) plays back or scrubs a `.trc` on a PC with
-live gauges — decoded **throttle, rpm, speed, gear, clutch** plus the computed
-**brake-light state**. It decodes through `profiles/triumph_tr.dbc` (same `python-can`
-+ `cantools` path as the golden test), reproduces the firmware's derived acceleration
-(`can_decode.c`) and the [DE-09 brake FSM](../docs/design/de-09-brake-decel-logic.md),
-and exposes every FSM tunable as a live slider so it doubles as a calibration bench.
+Open [`tools/trc_viz.html`](../tools/trc_viz.html) directly in any modern browser,
+then drag a logger `.trc` file onto the page (or use **Open trace**). It is one local
+HTML file with no server, install, or network access required. The viewer decodes the
+Triumph TR profile in-browser and provides live playback gauges, a zoomable timeline,
+nearby raw-frame inspection, and live [DE-09 brake FSM](../docs/design/de-09-brake-decel-logic.md)
+tuning. It does not upload or retain the trace.
 
-The script carries its dependencies inline ([PEP 723]), so [uv] installs them into an
-ephemeral environment on first run — no venv or `pip install` step:
+For automated decode comparisons and the older native dashboard, the Python tools
+remain available:
 
 ```sh
-uv run tools/trc_viz.py logger/40mph_drive_cycle.trc          # interactive dashboard
-uv run tools/trc_viz.py logger/40mph_drive_cycle.trc --headless-check  # decode + stats, no GUI
+uv run tools/trc_viz.py logger/40mph_drive_cycle.trc --headless-check
 ```
 
-Prefer plain `pip`? `pip install -r tools/requirements.txt` then run with `python`
-instead of `uv run`.
-
-The GUI needs a display; on a headless box run it under `xvfb-run`. Use the play/pause
-button and speed multiplier to play in real time (or 0.5/2/4×), or drag the timeline
-cursor / scrub slider to seek.
-
-[PEP 723]: https://peps.python.org/pep-0723/
 [uv]: https://docs.astral.sh/uv/
