@@ -9,6 +9,7 @@ fabrication-toolkit-options.json
 
 # Fabrication Toolkit output (regenerated from the design)
 production/
+production*
 
 # VS Code Local History extension
 .history/
