@@ -9,6 +9,8 @@ English-language datasheets from the manufacturer links below when needed.
 | D2 | Nexperia | PTVS3V3D1BALYL | [Datasheet (PDF)](https://assets.nexperia.com/documents/data-sheet/PTVS3V3D1BAL.pdf) |
 | D3 | Littelfuse | SM24CANB-02HTG | [Datasheet (PDF)](https://www.littelfuse.com/assetdocs/littelfuse-tvs-diode-array-sm24canb-datasheet?assetguid=09dc84a6-1ff8-409f-a80f-5e92aedec8fe) |
 | D4 | SMC | 20CJQ060 | [Datasheet (PDF)](https://www.smc-diodes.com/propdf/20CJQ060%20N0672%20REV.A.pdf) |
+| D5 | Lite-On | LTST-C190KGKT (green LED) | [Datasheet (PDF)](https://optoelectronics.liteon.com/upload/download/DS22-2000-074/LTST-C190KGKT.PDF) |
+| D6 | Lite-On | LTST-C190KRKT (red LED) | [Datasheet (PDF)](https://optoelectronics.liteon.com/upload/download/DS-22-99-0151/LTST-C190KRKT.PDF) |
 | J2 | G-Switch | GT-USB-7010ASV | Manufacturer-hosted document was not publicly available; [authorized distributor listing](https://jlcpcb.com/partdetail/gswitch-GT_USB7010ASV/C2988369) |
 | J3 | JST | S5B-PH-SM4-TB(LF)(SN) | [PH connector datasheet (PDF)](https://www.jst-mfg.com/product/pdf/eng/ePH.pdf) |
 | J4 | JST | S4B-PH-SM4-TB(LF)(SN) | [PH connector datasheet (PDF)](https://www.jst-mfg.com/product/pdf/eng/ePH.pdf) |
@@ -20,7 +22,7 @@ English-language datasheets from the manufacturer links below when needed.
 | U1 | Espressif | ESP32-S3 technical reference manual | [TRM (PDF)](https://documentation.espressif.com/esp32-s3_technical_reference_manual_en.pdf) |
 | U2 | Texas Instruments | TCAN330 | [Datasheet (PDF)](https://www.ti.com/lit/ds/symlink/tcan330.pdf) |
 | U3 | STMicroelectronics | USBLC6-2P6 | [Datasheet (PDF)](https://www.st.com/resource/en/datasheet/usblc6-2.pdf) |
-| U4 | Texas Instruments | TPS62172DSG | [TPS62170-family datasheet (PDF)](https://www.ti.com/lit/ds/symlink/tps62170.pdf) |
+| U4 | Texas Instruments | TPS62162DSGR | [Datasheet (PDF)](https://www.ti.com/lit/ds/symlink/tps62162.pdf) |
 | SW1, SW2 | Mitsumi | R-668003 tactile switch | [Authorized distributor product and datasheet](https://www.digikey.com/en/products/detail/mitsumi/R-668003/11591279) |
 
 Resistors and capacitors are deliberately omitted. SW1 and SW2 are intentionally
