@@ -1,7 +1,7 @@
 # Brake_light — software
 
-Helmet-side firmware (ESP32-C3, ESP-IDF). See
-[`docs/firmware.md §2`](../../docs/firmware.md#2-brake_light-firmware-helmet-side).
+Rider-side firmware (ESP32-C3, ESP-IDF). See
+[`docs/firmware.md §2`](../../docs/firmware.md#2-brake_light-firmware-rider-side).
 
 Responsibilities:
 - Receive `chmbl_msg_t` over [ESP-NOW](../../docs/protocol.md) (encrypted, pre-paired peer).
