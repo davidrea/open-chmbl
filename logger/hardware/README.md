@@ -57,8 +57,8 @@ this board goes on a bike full-time; fine for bench/ride-logging use.
 
 **U2 (`TCAN330`)**, 3.3 V logic — TXD/RXD to the ESP32-S3, plus its **silent-mode
 (`S`) pin** wired to a GPIO so firmware can force RX-only operation in hardware, not
-just in software. See [§5](#5-known-issue--gpio45s-pin-conflicts-with-a-boot-strap)
-for a problem with exactly this pin.
+just in software. This pin was moved to a non-strapping GPIO to fix an earlier
+strapping-pin conflict — see [§5](#5-resolved--can-silent-pin-moved-off-strapping-pin-gpio45).
 
 ### 3.2 microSD (J5)
 
@@ -80,22 +80,26 @@ a physical button/LED breakout. See
 [`transmitter/hardware/README.md`](../../transmitter/hardware/README.md) and
 [`docs/hardware.md §1`](../../docs/hardware.md#1-transmitter-bike-side).
 
-## 5. Known issue — GPIO45's pin conflicts with a boot strap
+## 5. Resolved — CAN silent pin moved off strapping pin (`GPIO45`)
 
-**`R16`** pulls the CAN transceiver's silent-mode pin (`U2` pin 8, ESP32-S3
-`GPIO45`) **up to 3V3**. `GPIO45` is one of the ESP32-S3's strapping pins — it
-selects the SPI-flash/PSRAM supply voltage at reset (low = internal 3.3 V regulator,
-the correct setting for this module's flash; high = expects an externally-supplied
-1.8 V rail). Pulling it high at boot is the same class of bug already hit once on
-this project's bench boards (GPIO8 vs. the SPI-flash bus — see the blink-LED note)
-and is a known cause of ESP32-S3 boards that won't boot / report flash read errors.
+An earlier rev routed the CAN transceiver's silent-mode pin (`U2` pin 8) to
+**`GPIO45`**, one of the ESP32-S3's strapping pins — it selects the SPI-flash/PSRAM
+supply voltage at reset (low = internal 3.3 V regulator, correct for this module;
+high = expects an externally-supplied 1.8 V rail). **`R16`** pulls the `S` pin up to
+3V3 to default the transceiver to **silent mode before firmware runs** (the right
+failsafe for a listen-only device), but with `S` on `GPIO45` that pull-up also drove
+the strapping pin high at boot — the same class of bug already hit once on this
+project's bench boards (GPIO8 vs. the SPI-flash bus — see the blink-LED note) and a
+known cause of ESP32-S3 boards that won't boot / report flash read errors.
 
-The pull-up itself is sensible in isolation — it defaults the transceiver to
-**silent mode before firmware runs**, which is the right failsafe for a listen-only
-device — but `GPIO45` is the wrong net for it. **Verify board bring-up before relying
-on this rev**; the fix is either a rework (replace `R16` with a pull-down to force
-`GPIO45` low, moving the transceiver's default-silent behavior to firmware-only) or,
-for a respin, moving the CAN `S` pin off `GPIO45` to a non-strapping GPIO.
+**This is fixed in the current schematic:** the `S` pin is now on **`GPIO35`** (a
+non-strapping GPIO, free on the `-N8` module since it has no PSRAM), and `R16` pulls
+`GPIO35` up — keeping the default-silent failsafe without touching any strap.
+`GPIO45` is left **unconnected**, so its internal pull-down selects the 3.3 V flash
+supply as intended. The two other straps are clean too: `IO0` is the boot button
+(internal pull-up) and `GPIO46` is unconnected. Still worth a bring-up confirmation
+that `GPIO45` is unstuffed and boot is repeatable — see
+[`BRINGUP.md §4`](BRINGUP.md#4-gpio--strapping-verification).
 
 ## 6. Fabrication / BOM
 
