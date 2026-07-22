@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>open-chmbl CAN trace viewer</title>
+  <style>
+    :root {
+      --page: #0b1018; --panel: #121b28; --panel-2: #182334; --line: #28384d;
+      --ink: #e8f1ff; --muted: #8fa2ba; --cyan: #34d8da; --blue: #6fa8ff;
+      --gold: #ffc857; --red: #ff5c6c; --green: #53d69b; --orange: #ff9f43;
+      --focus: #b6d4ff; --shadow: 0 16px 44px rgba(0, 0, 0, .28);
+    }
+    * { box-sizing: border-box; }
+    html { min-width: 320px; background: var(--page); }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 30% -10%, #1d304a 0, var(--page) 38rem); color: var(--ink); font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button, input, select { font: inherit; }
+    button, select, input[type="number"] { min-height: 34px; border: 1px solid var(--line); border-radius: 7px; background: #0e1723; color: var(--ink); }
+    button { cursor: pointer; padding: 0 12px; font-weight: 650; }
+    button:hover { border-color: #517198; background: #19283a; }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    button.primary { border-color: #347b91; background: #0c5464; }
+    button.primary:hover { background: #11677a; }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+    input[type="range"] { accent-color: var(--cyan); }
+    .shell { width: min(1680px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 42px; }
+    .masthead { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 20px; }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: -.035em; }
+    h1 span { color: var(--cyan); }
+    .subtitle { max-width: 760px; margin-top: 7px; color: var(--muted); }
+    .file-actions { display: flex; align-items: center; gap: 9px; flex: 0 0 auto; }
+    #file-input { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .file-name { max-width: 280px; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+    .drop-zone { display: grid; place-items: center; min-height: 312px; padding: 32px; border: 1.5px dashed #46698f; border-radius: 14px; background: linear-gradient(135deg, rgba(31, 55, 82, .52), rgba(18, 27, 40, .72)); box-shadow: var(--shadow); text-align: center; transition: .15s ease; }
+    .drop-zone.dragover { border-color: var(--cyan); background: rgba(21, 75, 89, .48); transform: translateY(-2px); }
+    .drop-zone[hidden], #viewer[hidden] { display: none; }
+    .drop-icon { display: grid; place-items: center; width: 64px; height: 64px; margin: 0 auto 15px; border: 1px solid #46789d; border-radius: 18px; color: var(--cyan); font-size: 32px; }
+    .drop-zone h2 { font-size: 1.35rem; }
+    .drop-zone p { max-width: 500px; margin: 8px auto 19px; color: var(--muted); }
+    .hint { margin-top: 15px; color: var(--muted); font-size: .88rem; }
+    .error { margin-top: 13px; color: #ff9da7; font-weight: 600; }
+    .notice { margin: 0 0 16px; padding: 10px 12px; border: 1px solid #775a27; border-radius: 8px; background: rgba(110, 70, 17, .2); color: #ffd58a; }
+    .instrument-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 11px; margin-bottom: 12px; }
+    .instrument, .signal-card { min-height: 158px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: rgba(18, 27, 40, .86); box-shadow: 0 5px 18px rgba(0, 0, 0, .13); }
+    .label { display: block; color: var(--muted); font-size: .7rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+    .detail { display: block; color: var(--muted); font-size: .76rem; font-weight: 600; letter-spacing: 0; }
+    .gauge-card { display: flex; flex-direction: column; }
+    .gauge-wrap { position: relative; width: min(180px, 100%); aspect-ratio: 180 / 132; margin: -4px auto -9px; }
+    .gauge { position: absolute; inset: 0; display: block; width: 100%; height: 100%; cursor: default; touch-action: auto; }
+    .gauge-value { position: absolute; inset: auto 0 18px; display: block; color: var(--ink); font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace; font-size: clamp(1.25rem, 2vw, 1.75rem); font-variant-numeric: tabular-nums; font-weight: 760; letter-spacing: -.045em; pointer-events: none; text-align: center; }
+    .numeric { display: inline-block; min-width: 5ch; font-variant-numeric: tabular-nums; text-align: right; white-space: pre; }
+    .unit { color: var(--muted); font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: .62em; font-weight: 650; letter-spacing: 0; }
+    .gauge-card .detail { margin-top: -3px; text-align: center; }
+    .gear-card { display: flex; flex-direction: column; justify-content: space-between; }
+    .gear-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .gear-current { color: var(--ink); font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace; font-size: 1.2rem; font-weight: 760; font-variant-numeric: tabular-nums; }
+    .gear-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin: 10px 0; }
+    .gear-box { display: grid; place-items: center; aspect-ratio: .94; min-width: 0; border: 1px solid #374a60; border-radius: 5px; background: #0d1621; color: var(--muted); font-size: clamp(.68rem, 1.2vw, .96rem); font-weight: 780; transition: .12s ease; }
+    .gear-box.active { border-color: var(--cyan); background: var(--cyan); color: #06212b; box-shadow: 0 0 17px rgba(52, 216, 218, .48); transform: translateY(-1px); }
+    .brake-card { display: flex; flex-direction: column; justify-content: space-between; }
+    .brake-lamp { position: relative; display: grid; place-items: center; min-height: 72px; margin: 8px 0 7px; overflow: hidden; border: 1px solid #513440; border-radius: 45% 45% 26% 26% / 58% 58% 34% 34%; background: radial-gradient(ellipse at 50% 18%, #3d1720, #160f17 70%); box-shadow: inset 0 0 18px rgba(0, 0, 0, .8); }
+    .brake-lamp::before { position: absolute; inset: 5px 10px 25px; border-radius: 50%; background: linear-gradient(105deg, rgba(255,255,255,.14), transparent 35%); content: ""; }
+    .brake-word { position: relative; z-index: 1; color: #bd8f99; font-size: clamp(.72rem, 1.25vw, .98rem); font-weight: 850; letter-spacing: .08em; text-shadow: 0 1px #000; }
+    .brake-card.on .brake-lamp { border-color: #ff6b78; background: radial-gradient(ellipse at 50% 35%, #ffb04f 0, #ff4a5c 31%, #b11e36 70%, #511224 100%); box-shadow: 0 0 10px rgba(255, 69, 84, .72), 0 0 29px rgba(255, 53, 72, .32), inset 0 0 14px rgba(255, 227, 184, .38); }
+    .brake-card.on .brake-word { color: #fff7e7; text-shadow: 0 0 10px #fff2da; }
+    .brake-card.off .brake-lamp { filter: saturate(.72); }
+    .chart-panel, .controls, .tuning, .frames { border: 1px solid var(--line); border-radius: 11px; background: rgba(18, 27, 40, .9); box-shadow: 0 5px 18px rgba(0, 0, 0, .13); }
+    .chart-panel { overflow: hidden; }
+    .chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; padding: 12px 15px 9px; border-bottom: 1px solid rgba(40, 56, 77, .7); }
+    .legend, .range-label { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; color: var(--muted); font-size: .82rem; }
+    .chart-actions { display: flex; align-items: center; gap: 9px; }
+    .chart-actions button { min-height: 28px; padding: 0 9px; color: var(--muted); font-size: .78rem; }
+    .key { display: inline-flex; gap: 5px; align-items: center; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+    canvas { display: block; width: 100%; cursor: crosshair; touch-action: none; }
+    #main-chart { height: min(55vw, 470px); min-height: 270px; }
+    #overview-chart { height: 94px; cursor: ew-resize; }
+    .controls { display: grid; grid-template-columns: auto auto auto minmax(130px, 1fr) auto; align-items: center; gap: 9px; margin-top: 12px; padding: 10px; }
+    #time-range { width: 100%; }
+    .time-readout { min-width: 136px; color: var(--muted); font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; text-align: right; }
+    .lower { display: grid; grid-template-columns: minmax(300px, .95fr) minmax(390px, 1.35fr); gap: 12px; margin-top: 12px; }
+    .tuning, .frames { padding: 15px; }
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+    .section-head h2 { font-size: .92rem; letter-spacing: .03em; }
+    .section-head span { color: var(--muted); font-size: .78rem; }
+    .tuning-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 12px; }
+    .tune { display: grid; grid-template-columns: minmax(0, 1fr) 72px; align-items: center; gap: 8px; }
+    .tune label { overflow: hidden; color: var(--muted); font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
+    .tune input { width: 100%; padding: 5px 7px; font-size: .85rem; }
+    .fsm-stats { margin-top: 14px; padding-top: 11px; border-top: 1px solid var(--line); color: var(--gold); font-variant-numeric: tabular-nums; }
+    .table-scroll { max-height: 307px; overflow: auto; border: 1px solid rgba(40, 56, 77, .8); border-radius: 7px; }
+    table { width: 100%; border-collapse: collapse; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .78rem; font-variant-numeric: tabular-nums; }
+    th { position: sticky; top: 0; background: #1a2636; color: var(--muted); text-align: left; font: 700 .7rem/1.3 Inter, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+    th, td { padding: 7px 8px; border-bottom: 1px solid rgba(40, 56, 77, .65); white-space: nowrap; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover, tbody tr.current { background: rgba(52, 216, 218, .10); }
+    .status { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; color: var(--muted); font-size: .78rem; }
+    .status strong { color: var(--ink); }
+    .loading { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(7, 12, 19, .78); backdrop-filter: blur(4px); }
+    .loading[hidden] { display: none; }
+    .loading-box { padding: 22px 28px; border: 1px solid #3d6083; border-radius: 12px; background: var(--panel); box-shadow: var(--shadow); text-align: center; }
+    .spinner { width: 32px; height: 32px; margin: 0 auto 11px; border: 3px solid #2f5875; border-top-color: var(--cyan); border-radius: 50%; animation: spin .85s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 1060px) { .instrument-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .lower { grid-template-columns: 1fr; } }
+    @media (max-width: 680px) { .shell { width: min(100% - 20px, 1680px); padding-top: 14px; } .masthead { display: block; } .file-actions { margin-top: 14px; } .instrument-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .instrument, .signal-card { min-height: 143px; padding: 10px; } .gear-card, .brake-card { grid-column: span 2; min-height: 118px; } .gear-strip { max-width: 370px; width: 100%; margin: 10px auto; } .brake-lamp { max-width: 310px; width: 100%; margin: 8px auto; } .controls { grid-template-columns: auto auto 1fr; } .controls #time-range { grid-column: 1 / -1; grid-row: 2; } .time-readout { text-align: right; } .tuning-grid { grid-template-columns: 1fr; } #main-chart { min-height: 300px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div>
+        <h1><span>open-chmbl</span> CAN trace viewer</h1>
+        <p class="subtitle">A local, dependency-free PCAN <code>.trc</code> playback and braking-analysis bench. Nothing leaves this browser tab.</p>
+      </div>
+      <div class="file-actions">
+        <span id="file-name" class="file-name">No trace loaded</span>
+        <button id="open-file" class="primary" type="button">Open trace</button>
+        <input id="file-input" type="file" accept=".trc,text/plain">
+      </div>
+    </header>
+
+    <section id="drop-zone" class="drop-zone" aria-label="Drop CAN trace here">
+      <div>
+        <div class="drop-icon" aria-hidden="true">⌁</div>
+        <h2>Drop a PCAN trace here</h2>
+        <p>Drag a <strong>.trc</strong> file anywhere onto this window, or choose one from your computer. The trace is parsed locally in your browser.</p>
+        <button id="choose-file" class="primary" type="button">Choose .trc file</button>
+        <div class="hint">Triumph TR profile: speed, throttle, RPM, transmission, cutoff, and simulated DE-09 brake state.</div>
+        <div id="load-error" class="error" role="alert"></div>
+      </div>
+    </section>
+
+    <section id="viewer" hidden>
+      <p id="notice" class="notice" hidden></p>
+      <section class="instrument-grid" aria-label="Live trace values">
+        <article class="instrument gauge-card speed">
+          <span class="label">Speed</span>
+          <div class="gauge-wrap">
+            <canvas id="speed-gauge" class="gauge" width="180" height="132" aria-label="Speed gauge"></canvas>
+            <span id="speed-value" class="gauge-value">— <span class="unit">mph</span></span>
+          </div>
+          <span id="speed-detail" class="detail">front wheel · 0–60 mph</span>
+        </article>
+        <article class="instrument gauge-card accel">
+          <span class="label">Acceleration</span>
+          <div class="gauge-wrap">
+            <canvas id="accel-gauge" class="gauge" width="180" height="132" aria-label="Acceleration gauge"></canvas>
+            <span id="accel-value" class="gauge-value">— <span class="unit">mph/s</span></span>
+          </div>
+          <span id="accel-detail" class="detail">deceleration / acceleration</span>
+        </article>
+        <article class="instrument gauge-card rpm">
+          <span class="label">Engine</span>
+          <div class="gauge-wrap">
+            <canvas id="rpm-gauge" class="gauge" width="180" height="132" aria-label="Engine speed gauge"></canvas>
+            <span id="rpm-value" class="gauge-value">— <span class="unit">rpm</span></span>
+          </div>
+          <span id="rpm-detail" class="detail">live tach · 0–8,000 rpm</span>
+        </article>
+        <article class="instrument gauge-card throttle">
+          <span class="label">Throttle</span>
+          <div class="gauge-wrap">
+            <canvas id="throttle-gauge" class="gauge" width="180" height="132" aria-label="Throttle gauge"></canvas>
+            <span id="throttle-value" class="gauge-value">— <span class="unit">%</span></span>
+          </div>
+          <span id="throttle-detail" class="detail">rider demand · 0–100%</span>
+        </article>
+        <article class="signal-card gear-card">
+          <div class="gear-heading"><span class="label">Transmission</span><span id="gear-value" class="gear-current">—</span></div>
+          <div id="gear-strip" class="gear-strip" role="img" aria-label="Current gear selection"><span class="gear-box" data-gear="1">1</span><span class="gear-box" data-gear="0">N</span><span class="gear-box" data-gear="2">2</span><span class="gear-box" data-gear="3">3</span><span class="gear-box" data-gear="4">4</span><span class="gear-box" data-gear="5">5</span><span class="gear-box" data-gear="6">6</span></div>
+          <span id="gear-detail" class="detail">clutch —</span>
+        </article>
+        <article id="brake-card" class="signal-card brake-card off">
+          <span class="label">Brake light</span>
+          <div class="brake-lamp"><span id="brake-value" class="brake-word" aria-live="polite">OFF</span></div>
+          <span id="brake-detail" class="detail">DE-09 simulation</span>
+        </article>
+      </section>
+
+      <section class="chart-panel" aria-label="Trace timeline">
+        <div class="chart-head">
+          <div class="legend">
+            <span class="key"><i class="dot" style="background:var(--cyan)"></i>speed mph</span>
+            <span class="key"><i class="dot" style="background:var(--gold)"></i>rpm / 100</span>
+            <span class="key"><i class="dot" style="background:var(--blue)"></i>throttle %</span>
+            <span class="key"><i class="dot" style="background:var(--red)"></i>decel mph/s</span>
+            <span class="key"><i class="dot" style="background:var(--orange)"></i>brake state</span>
+          </div>
+          <div class="chart-actions"><span id="range-label" class="range-label">—</span><button id="reset-zoom" type="button">Reset zoom</button></div>
+        </div>
+        <canvas id="main-chart" aria-label="Detailed trace chart; click to seek and drag to zoom"></canvas>
+        <canvas id="overview-chart" aria-label="Full trace overview; click or drag to choose range"></canvas>
+      </section>
+
+      <section class="controls" aria-label="Playback controls">
+        <button id="play" class="primary" type="button">Play</button>
+        <button id="back" type="button" title="Back 1 second">−1 s</button>
+        <button id="forward" type="button" title="Forward 1 second">+1 s</button>
+        <input id="time-range" type="range" min="0" max="1" value="0" step="0.02" aria-label="Trace position">
+        <select id="rate" aria-label="Playback speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select>
+        <output id="time-readout" class="time-readout">00:00.000 / 00:00.000</output>
+      </section>
+
+      <section class="lower">
+        <section class="tuning">
+          <div class="section-head"><h2>DE-09 brake-state tuning</h2><span>Changes recompute locally</span></div>
+          <div id="tuning-grid" class="tuning-grid"></div>
+          <div id="fsm-stats" class="fsm-stats">—</div>
+        </section>
+        <section class="frames">
+          <div class="section-head"><h2>Frames near playhead</h2><span id="frame-context">—</span></div>
+          <div class="table-scroll">
+            <table><thead><tr><th>Offset</th><th>ID</th><th>Dir</th><th>DLC</th><th>Data</th></tr></thead><tbody id="frame-rows"></tbody></table>
+          </div>
+        </section>
+      </section>
+      <footer class="status"><span id="parse-status">—</span><span>Space: play/pause · ←/→: 1 s · click chart: seek · drag chart: zoom</span></footer>
+    </section>
+  </main>
+  <div id="loading" class="loading" hidden><div class="loading-box"><div class="spinner"></div><strong id="loading-label">Loading trace…</strong><p>Parsing locally; large captures can take a moment.</p></div></div>
+
+  <!-- Gauge.js v1.3.9, vendored for offline single-file use.
+       MIT License, Copyright (c) 2019 Bernard Kobos.
+       https://github.com/bernii/gauge.js -->
+  <script>
+  /*
+   * MIT License
+   * Copyright (c) 2019 Bernard Kobos
+   *
+   * Permission is hereby granted, free of charge, to any person obtaining a
+   * copy of this software and associated documentation files (the "Software"),
+   * to deal in the Software without restriction, including without limitation
+   * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+   * and/or sell copies of the Software, and to permit persons to whom the
+   * Software is furnished to do so, subject to the following conditions:
+   *
+   * The above copyright notice and this permission notice shall be included in
+   * all copies or substantial portions of the Software.
+   *
+   * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+   * THE SOFTWARE.
+   */
+(function(){var t,i,e,s,n,o,a,h,r,l,c,p,u,d,g=[].slice,m={}.hasOwnProperty,f=function(t,i){for(var e in i)m.call(i,e)&&(t[e]=i[e]);function s(){this.constructor=t}return s.prototype=i.prototype,t.prototype=new s,t.__super__=i.prototype,t},x=[].indexOf||function(t){for(var i=0,e=this.length;i<e;i++)if(i in this&&this[i]===t)return i;return-1};!function(){var t,i,e,s,n,o,a;for(e=0,n=(a=["ms","moz","webkit","o"]).length;e<n&&(o=a[e],!window.requestAnimationFrame);e++)window.requestAnimationFrame=window[o+"RequestAnimationFrame"],window.cancelAnimationFrame=window[o+"CancelAnimationFrame"]||window[o+"CancelRequestAnimationFrame"];t=null,s=0,i={},window.requestAnimationFrame?window.cancelAnimationFrame||(t=window.requestAnimationFrame,window.requestAnimationFrame=function(e,n){var o;return o=++s,t((function(){if(!i[o])return e()}),n),o},window.cancelAnimationFrame=function(t){return i[t]=!0}):(window.requestAnimationFrame=function(t,i){var e,s,n,o;return e=(new Date).getTime(),o=Math.max(0,16-(e-n)),s=window.setTimeout((function(){return t(e+o)}),o),n=e+o,s},window.cancelAnimationFrame=function(t){return clearTimeout(t)})}(),d=function(t){var i,e;for(t-=3600*(i=Math.floor(t/3600))+60*(e=Math.floor((t-3600*i)/60)),t+="",e+="";e.length<2;)e="0"+e;for(;t.length<2;)t="0"+t;return(i=i?i+":":"")+e+":"+t},p=function(){var t,i,e;return e=(i=1<=arguments.length?g.call(arguments,0):[])[0],t=i[1],l(e.toFixed(t))},u=function(t,i){var e,s,n;for(e in s={},t)m.call(t,e)&&(n=t[e],s[e]=n);for(e in i)m.call(i,e)&&(n=i[e],s[e]=n);return s},l=function(t){var i,e,s,n;for(s=(e=(t+="").split("."))[0],n="",e.length>1&&(n="."+e[1]),i=/(\d+)(\d{3})/;i.test(s);)s=s.replace(i,"$1,$2");return s+n},c=function(t){return"#"===t.charAt(0)?t.substring(1,7):t},s=function(t){function i(){return i.__super__.constructor.apply(this,arguments)}return f(i,t),i.prototype.displayScale=1,i.prototype.forceUpdate=!0,i.prototype.setTextField=function(t,i){return this.textField=t instanceof h?t:new h(t,i)},i.prototype.setMinValue=function(t,i){var e,s,n,o,a;if(this.minValue=t,null==i&&(i=!0),i){for(this.displayedValue=this.minValue,a=[],s=0,n=(o=this.gp||[]).length;s<n;s++)e=o[s],a.push(e.displayedValue=this.minValue);return a}},i.prototype.setOptions=function(t){return null==t&&(t=null),this.options=u(this.options,t),this.textField&&(this.textField.el.style.fontSize=t.fontSize+"px"),this.options.angle>.5&&(this.options.angle=.5),this.configDisplayScale(),this},i.prototype.configDisplayScale=function(){var t,i,e,s,n;return s=this.displayScale,!1===this.options.highDpiSupport?delete this.displayScale:(i=window.devicePixelRatio||1,t=this.ctx.webkitBackingStorePixelRatio||this.ctx.mozBackingStorePixelRatio||this.ctx.msBackingStorePixelRatio||this.ctx.oBackingStorePixelRatio||this.ctx.backingStorePixelRatio||1,this.displayScale=i/t),this.displayScale!==s&&(n=this.canvas.G__width||this.canvas.width,e=this.canvas.G__height||this.canvas.height,this.canvas.width=n*this.displayScale,this.canvas.height=e*this.displayScale,this.canvas.style.width=n+"px",this.canvas.style.height=e+"px",this.canvas.G__width=n,this.canvas.G__height=e),this},i.prototype.parseValue=function(t){return t=parseFloat(t)||Number(t),isFinite(t)?t:0},i}(r=function(){function t(t,e){null==t&&(t=!0),this.clear=null==e||e,t&&i.add(this)}return t.prototype.animationSpeed=32,t.prototype.update=function(t){var i;return null==t&&(t=!1),!(!t&&this.displayedValue===this.value)&&(this.ctx&&this.clear&&this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height),i=this.value-this.displayedValue,Math.abs(i/this.animationSpeed)<=.001?this.displayedValue=this.value:this.displayedValue=this.displayedValue+i/this.animationSpeed,this.render(),!0)},t}()),h=function(){function t(t,i){this.el=t,this.fractionDigits=i}return t.prototype.render=function(t){return this.el.innerHTML=p(t.displayedValue,this.fractionDigits)},t}(),t=function(t){function i(t,e){if(this.elem=t,this.text=null!=e&&e,i.__super__.constructor.call(this),void 0===this.elem)throw new Error("The element isn't defined.");this.value=1*this.elem.innerHTML,this.text&&(this.value=0)}return f(i,t),i.prototype.displayedValue=0,i.prototype.value=0,i.prototype.setVal=function(t){return this.value=1*t},i.prototype.render=function(){var t;return t=this.text?d(this.displayedValue.toFixed(0)):l(p(this.displayedValue)),this.elem.innerHTML=t},i}(r),a=function(t){function i(t){if(this.gauge=t,void 0===this.gauge)throw new Error("The element isn't defined.");this.ctx=this.gauge.ctx,this.canvas=this.gauge.canvas,i.__super__.constructor.call(this,!1,!1),this.setOptions()}return f(i,t),i.prototype.displayedValue=0,i.prototype.value=0,i.prototype.options={strokeWidth:.035,length:.1,color:"#000000",iconPath:null,iconScale:1,iconAngle:0},i.prototype.img=null,i.prototype.setOptions=function(t){if(null==t&&(t=null),this.options=u(this.options,t),this.length=2*this.gauge.radius*this.gauge.options.radiusScale*this.options.length,this.strokeWidth=this.canvas.height*this.options.strokeWidth,this.maxValue=this.gauge.maxValue,this.minValue=this.gauge.minValue,this.animationSpeed=this.gauge.animationSpeed,this.options.angle=this.gauge.options.angle,this.options.iconPath)return this.img=new Image,this.img.src=this.options.iconPath},i.prototype.render=function(){var t,i,e,s,n,o,a,h,r;if(t=this.gauge.getAngle.call(this,this.displayedValue),h=Math.round(this.length*Math.cos(t)),r=Math.round(this.length*Math.sin(t)),o=Math.round(this.strokeWidth*Math.cos(t-Math.PI/2)),a=Math.round(this.strokeWidth*Math.sin(t-Math.PI/2)),i=Math.round(this.strokeWidth*Math.cos(t+Math.PI/2)),e=Math.round(this.strokeWidth*Math.sin(t+Math.PI/2)),this.ctx.beginPath(),this.ctx.fillStyle=this.options.color,this.ctx.arc(0,0,this.strokeWidth,0,2*Math.PI,!1),this.ctx.fill(),this.ctx.beginPath(),this.ctx.moveTo(o,a),this.ctx.lineTo(h,r),this.ctx.lineTo(i,e),this.ctx.fill(),this.img)return s=Math.round(this.img.width*this.options.iconScale),n=Math.round(this.img.height*this.options.iconScale),this.ctx.save(),this.ctx.translate(h,r),this.ctx.rotate(t+Math.PI/180*(90+this.options.iconAngle)),this.ctx.drawImage(this.img,-s/2,-n/2,s,n),this.ctx.restore()},i}(r),function(){function t(t){this.elem=t}t.prototype.updateValues=function(t){return this.value=t[0],this.maxValue=t[1],this.avgValue=t[2],this.render()},t.prototype.render=function(){var t,i;return this.textField&&this.textField.text(p(this.value)),0===this.maxValue&&(this.maxValue=2*this.avgValue),i=this.value/this.maxValue*100,t=this.avgValue/this.maxValue*100,$(".bar-value",this.elem).css({width:i+"%"}),$(".typical-value",this.elem).css({width:t+"%"})}}(),o=function(t){function e(t){var i,s;this.canvas=t,e.__super__.constructor.call(this),this.percentColors=null,"undefined"!=typeof G_vmlCanvasManager&&(this.canvas=window.G_vmlCanvasManager.initElement(this.canvas)),this.ctx=this.canvas.getContext("2d"),i=this.canvas.clientHeight,s=this.canvas.clientWidth,this.canvas.height=i,this.canvas.width=s,this.gp=[new a(this)],this.setOptions()}return f(e,t),e.prototype.elem=null,e.prototype.value=[20],e.prototype.maxValue=80,e.prototype.minValue=0,e.prototype.displayedAngle=0,e.prototype.displayedValue=0,e.prototype.lineWidth=40,e.prototype.paddingTop=.1,e.prototype.paddingBottom=.1,e.prototype.percentColors=null,e.prototype.options={colorStart:"#6fadcf",colorStop:void 0,gradientType:0,strokeColor:"#e0e0e0",pointer:{length:.8,strokeWidth:.035,iconScale:1},angle:.15,lineWidth:.44,radiusScale:1,fontSize:40,limitMax:!1,limitMin:!1},e.prototype.setOptions=function(t){var i,s,n,o,a;for(null==t&&(t=null),e.__super__.setOptions.call(this,t),this.configPercentColors(),this.extraPadding=0,this.options.angle<0&&(o=Math.PI*(1+this.options.angle),this.extraPadding=Math.sin(o)),this.availableHeight=this.canvas.height*(1-this.paddingTop-this.paddingBottom),this.lineWidth=this.availableHeight*this.options.lineWidth,this.radius=(this.availableHeight-this.lineWidth/2)/(1+this.extraPadding),this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height),s=0,n=(a=this.gp).length;s<n;s++)(i=a[s]).setOptions(this.options.pointer),i.render();return this.render(),this},e.prototype.configPercentColors=function(){var t,i,e,s,n,o,a;if(this.percentColors=null,void 0!==this.options.percentColors){for(this.percentColors=new Array,o=[],e=s=0,n=this.options.percentColors.length-1;0<=n?s<=n:s>=n;e=0<=n?++s:--s)a=parseInt(c(this.options.percentColors[e][1]).substring(0,2),16),i=parseInt(c(this.options.percentColors[e][1]).substring(2,4),16),t=parseInt(c(this.options.percentColors[e][1]).substring(4,6),16),o.push(this.percentColors[e]={pct:this.options.percentColors[e][0],color:{r:a,g:i,b:t}});return o}},e.prototype.set=function(t){var e,s,n,o,h,r,l,c,p;for(t instanceof Array||(t=[t]),s=n=0,l=t.length-1;0<=l?n<=l:n>=l;s=0<=l?++n:--n)t[s]=this.parseValue(t[s]);if(t.length>this.gp.length)for(s=o=0,c=t.length-this.gp.length;0<=c?o<c:o>c;s=0<=c?++o:--o)(e=new a(this)).setOptions(this.options.pointer),this.gp.push(e);else t.length<this.gp.length&&(this.gp=this.gp.slice(this.gp.length-t.length));for(s=0,r=0,h=t.length;r<h;r++)(p=t[r])>this.maxValue?this.options.limitMax?p=this.maxValue:this.maxValue=p+1:p<this.minValue&&(this.options.limitMin?p=this.minValue:this.minValue=p-1),this.gp[s].value=p,this.gp[s++].setOptions({minValue:this.minValue,maxValue:this.maxValue,angle:this.options.angle});return this.value=Math.max(Math.min(t[t.length-1],this.maxValue),this.minValue),i.add(this),i.run(this.forceUpdate),this.forceUpdate=!1},e.prototype.getAngle=function(t){return(1+this.options.angle)*Math.PI+(t-this.minValue)/(this.maxValue-this.minValue)*(1-2*this.options.angle)*Math.PI},e.prototype.getColorForPercentage=function(t,i){var e,s,n,o,a,h,r;if(0===t)e=this.percentColors[0].color;else for(e=this.percentColors[this.percentColors.length-1].color,n=o=0,h=this.percentColors.length-1;0<=h?o<=h:o>=h;n=0<=h?++o:--o)if(t<=this.percentColors[n].pct){!0===i?(r=this.percentColors[n-1]||this.percentColors[0],s=this.percentColors[n],a=(t-r.pct)/(s.pct-r.pct),e={r:Math.floor(r.color.r*(1-a)+s.color.r*a),g:Math.floor(r.color.g*(1-a)+s.color.g*a),b:Math.floor(r.color.b*(1-a)+s.color.b*a)}):e=this.percentColors[n].color;break}return"rgb("+[e.r,e.g,e.b].join(",")+")"},e.prototype.getColorForValue=function(t,i){var e;return e=(t-this.minValue)/(this.maxValue-this.minValue),this.getColorForPercentage(e,i)},e.prototype.renderStaticLabels=function(t,i,e,s){var n,o,a,h,r,l,c,u,d,g;for(this.ctx.save(),this.ctx.translate(i,e),l=/\d+\.?\d?/,r=(n=t.font||"10px Times").match(l)[0],u=n.slice(r.length),o=parseFloat(r)*this.displayScale,this.ctx.font=o+u,this.ctx.fillStyle=t.color||"#000000",this.ctx.textBaseline="bottom",this.ctx.textAlign="center",a=0,h=(c=t.labels).length;a<h;a++)void 0!==(g=c[a]).label?(!this.options.limitMin||g>=this.minValue)&&(!this.options.limitMax||g<=this.maxValue)&&(r=(n=g.font||t.font).match(l)[0],u=n.slice(r.length),o=parseFloat(r)*this.displayScale,this.ctx.font=o+u,d=this.getAngle(g.label)-3*Math.PI/2,this.ctx.rotate(d),this.ctx.fillText(p(g.label,t.fractionDigits),0,-s-this.lineWidth/2),this.ctx.rotate(-d)):(!this.options.limitMin||g>=this.minValue)&&(!this.options.limitMax||g<=this.maxValue)&&(d=this.getAngle(g)-3*Math.PI/2,this.ctx.rotate(d),this.ctx.fillText(p(g,t.fractionDigits),0,-s-this.lineWidth/2),this.ctx.rotate(-d));return this.ctx.restore()},e.prototype.renderTicks=function(t,i,e,s){var n,o,a,h,r,l,c,p,u,d,g,m,f,x,v,y,V,w,S,M;if("object"==typeof t&&null!==t&&Object.keys(t).length>0){for(l=t.divisions||0,w=t.subDivisions||0,a=t.divColor||"#fff",x=t.subColor||"#fff",h=t.divLength||.7,y=t.subLength||.2,u=parseFloat(this.maxValue)-parseFloat(this.minValue),d=parseFloat(u)/parseFloat(t.divisions),v=parseFloat(d)/parseFloat(t.subDivisions),n=parseFloat(this.minValue),o=0+v,r=(p=u/400)*(t.divWidth||1),V=p*(t.subWidth||1),m=[],S=c=0,g=l+1;c<g;S=c+=1)this.ctx.lineWidth=this.lineWidth*h,f=this.lineWidth/2*(1-h),M=this.radius*this.options.radiusScale+f,this.ctx.strokeStyle=a,this.ctx.beginPath(),this.ctx.arc(0,0,M,this.getAngle(n-r),this.getAngle(n+r),!1),this.ctx.stroke(),o=n+v,n+=d,S!==t.divisions&&w>0?m.push(function(){var t,i,e;for(e=[],t=0,i=w-1;t<i;t+=1)this.ctx.lineWidth=this.lineWidth*y,f=this.lineWidth/2*(1-y),M=this.radius*this.options.radiusScale+f,this.ctx.strokeStyle=x,this.ctx.beginPath(),this.ctx.arc(0,0,M,this.getAngle(o-V),this.getAngle(o+V),!1),this.ctx.stroke(),e.push(o+=v);return e}.call(this)):m.push(void 0);return m}},e.prototype.render=function(){var t,i,e,s,n,o,a,h,r,l,c,p,u,d,g,m,f,x;if(f=this.canvas.width/2,e=this.canvas.height*this.paddingTop+this.availableHeight-(this.radius+this.lineWidth/2)*this.extraPadding,t=this.getAngle(this.displayedValue),this.textField&&this.textField.render(this),this.ctx.lineCap="butt",l=this.radius*this.options.radiusScale,this.options.staticLabels&&this.renderStaticLabels(this.options.staticLabels,f,e,l),this.options.staticZones)for(this.ctx.save(),this.ctx.translate(f,e),this.ctx.lineWidth=this.lineWidth,s=0,o=(c=this.options.staticZones).length;s<o;s++)r=(x=c[s]).min,this.options.limitMin&&r<this.minValue&&(r=this.minValue),h=x.max,this.options.limitMax&&h>this.maxValue&&(h=this.maxValue),m=this.radius*this.options.radiusScale,x.height&&(this.ctx.lineWidth=this.lineWidth*x.height,u=this.lineWidth/2*(x.offset||1-x.height),m=this.radius*this.options.radiusScale+u),this.ctx.strokeStyle=x.strokeStyle,this.ctx.beginPath(),this.ctx.arc(0,0,m,this.getAngle(r),this.getAngle(h),!1),this.ctx.stroke();else void 0!==this.options.customFillStyle?i=this.options.customFillStyle(this):null!==this.percentColors?i=this.getColorForValue(this.displayedValue,this.options.generateGradient):void 0!==this.options.colorStop?(0===this.options.gradientType?(d=l-this.lineWidth/2,g=l+this.lineWidth/2,i=this.ctx.createRadialGradient(f,e,d,f,e,g)):i=this.ctx.createLinearGradient(0,0,f,0),i.addColorStop(0,this.options.colorStart),i.addColorStop(1,this.options.colorStop)):i=this.options.colorStart,this.ctx.strokeStyle=i,this.ctx.beginPath(),this.ctx.arc(f,e,l,(1+this.options.angle)*Math.PI,t,!1),this.ctx.lineWidth=this.lineWidth,this.ctx.stroke(),this.ctx.strokeStyle=this.options.strokeColor,this.ctx.beginPath(),this.ctx.arc(f,e,l,t,(2-this.options.angle)*Math.PI,!1),this.ctx.stroke(),this.ctx.save(),this.ctx.translate(f,e);for(this.options.renderTicks&&this.renderTicks(this.options.renderTicks,f,e,l),this.ctx.restore(),this.ctx.translate(f,e),n=0,a=(p=this.gp).length;n<a;n++)p[n].update(!0);return this.ctx.translate(-f,-e)},e}(s),e=function(t){function e(t){this.canvas=t,e.__super__.constructor.call(this),"undefined"!=typeof G_vmlCanvasManager&&(this.canvas=window.G_vmlCanvasManager.initElement(this.canvas)),this.ctx=this.canvas.getContext("2d"),this.setOptions(),this.render()}return f(e,t),e.prototype.lineWidth=15,e.prototype.displayedValue=0,e.prototype.value=33,e.prototype.maxValue=80,e.prototype.minValue=0,e.prototype.options={lineWidth:.1,colorStart:"#6f6ea0",colorStop:"#c0c0db",strokeColor:"#eeeeee",shadowColor:"#d5d5d5",angle:.35,radiusScale:1},e.prototype.getAngle=function(t){return(1-this.options.angle)*Math.PI+(t-this.minValue)/(this.maxValue-this.minValue)*(2+this.options.angle-(1-this.options.angle))*Math.PI},e.prototype.setOptions=function(t){return null==t&&(t=null),e.__super__.setOptions.call(this,t),this.lineWidth=this.canvas.height*this.options.lineWidth,this.radius=this.options.radiusScale*(this.canvas.height/2-this.lineWidth/2),this},e.prototype.set=function(t){return this.value=this.parseValue(t),this.value>this.maxValue?this.options.limitMax?this.value=this.maxValue:this.maxValue=this.value:this.value<this.minValue&&(this.options.limitMin?this.value=this.minValue:this.minValue=this.value),i.add(this),i.run(this.forceUpdate),this.forceUpdate=!1},e.prototype.render=function(){var t,i,e,s,n,o;return t=this.getAngle(this.displayedValue),o=this.canvas.width/2,e=this.canvas.height/2,this.textField&&this.textField.render(this),s=this.radius-this.lineWidth/2,n=this.radius+this.lineWidth/2,(i=this.ctx.createRadialGradient(o,e,s,o,e,n)).addColorStop(0,this.options.colorStart),i.addColorStop(1,this.options.colorStop),this.ctx.strokeStyle=this.options.strokeColor,this.ctx.beginPath(),this.ctx.arc(o,e,this.radius,(1-this.options.angle)*Math.PI,(2+this.options.angle)*Math.PI,!1),this.ctx.lineWidth=this.lineWidth,this.ctx.lineCap="round",this.ctx.stroke(),this.ctx.strokeStyle=i,this.ctx.beginPath(),this.ctx.arc(o,e,this.radius,(1-this.options.angle)*Math.PI,t,!1),this.ctx.stroke()},e}(s),n=function(t){function i(){return i.__super__.constructor.apply(this,arguments)}return f(i,t),i.prototype.strokeGradient=function(t,i,e,s){var n;return(n=this.ctx.createRadialGradient(t,i,e,t,i,s)).addColorStop(0,this.options.shadowColor),n.addColorStop(.12,this.options._orgStrokeColor),n.addColorStop(.88,this.options._orgStrokeColor),n.addColorStop(1,this.options.shadowColor),n},i.prototype.setOptions=function(t){var e,s,n,o;return null==t&&(t=null),i.__super__.setOptions.call(this,t),o=this.canvas.width/2,e=this.canvas.height/2,s=this.radius-this.lineWidth/2,n=this.radius+this.lineWidth/2,this.options._orgStrokeColor=this.options.strokeColor,this.options.strokeColor=this.strokeGradient(o,e,s,n),this},i}(e),i={elements:[],animId:null,addAll:function(t){var e,s,n,o;for(o=[],s=0,n=t.length;s<n;s++)e=t[s],o.push(i.elements.push(e));return o},add:function(t){if(x.call(i.elements,t)<0)return i.elements.push(t)},run:function(t){var e,s,n,o,a,h,r;if(null==t&&(t=!1),isFinite(parseFloat(t))||!0===t){for(e=!0,r=[],n=s=0,a=(h=i.elements).length;s<a;n=++s)h[n].update(!0===t)?e=!1:r.push(n);for(o=r.length-1;o>=0;o+=-1)n=r[o],i.elements.splice(n,1);return i.animId=e?null:requestAnimationFrame(i.run)}if(!1===t)return!0===i.animId&&cancelAnimationFrame(i.animId),i.animId=requestAnimationFrame(i.run)}},"function"==typeof window.define&&null!=window.define.amd?define((function(){return{Gauge:o,Donut:n,BaseDonut:e,TextRenderer:h,AnimationUpdater:i}})):"undefined"!=typeof module&&null!=module.exports?module.exports={Gauge:o,Donut:n,BaseDonut:e,TextRenderer:h,AnimationUpdater:i}:(window.Gauge=o,window.Donut=n,window.BaseDonut=e,window.TextRenderer=h,window.AnimationUpdater=i)}).call(this);
+  </script>
+
+  <script>
+  (() => {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const els = Object.fromEntries(['file-input','open-file','choose-file','file-name','drop-zone','load-error','viewer','notice','main-chart','overview-chart','reset-zoom','play','back','forward','time-range','rate','time-readout','range-label','tuning-grid','fsm-stats','frame-rows','frame-context','parse-status','loading','loading-label','brake-card'].map(id => [id.replaceAll('-', '_'), $(id)]));
+    const METRIC = {
+      speed: $('speed-value'), accel: $('accel-value'), rpm: $('rpm-value'), throttle: $('throttle-value'),
+      gear: $('gear-value'), brake: $('brake-value'), speedDetail: $('speed-detail'), accelDetail: $('accel-detail'),
+      rpmDetail: $('rpm-detail'), throttleDetail: $('throttle-detail'), gearDetail: $('gear-detail'), brakeDetail: $('brake-detail'), gearStrip: $('gear-strip'),
+      gearBoxes: document.querySelectorAll ? [...document.querySelectorAll('.gear-box')] : [],
+      gauges: {
+        speed: $('speed-gauge'), accel: $('accel-gauge'), rpm: $('rpm-gauge'), throttle: $('throttle-gauge')
+      }
+    };
+    const COLORS = { page: '#121b28', grid: '#31445d', muted: '#8fa2ba', cyan: '#34d8da', blue: '#6fa8ff', gold: '#ffc857', red: '#ff5c6c', green: '#53d69b', orange: '#ff9f43', cursor: '#f6f9ff', select: 'rgba(111,168,255,.16)' };
+    const DT = 0.020, MPH_PER_KMH = 0.621371;
+    const DEFAULTS = {
+      decelOn: 2, decelDebounce: 120, stopSpeed: 1, movingSpeed: 3,
+      accelOff: .5, accelOffMinSpeed: 5, steadyBand: .75, steadyTimeout: 1500,
+      stopTimeout: 60000, minDwell: 250, speedSmooth: 80
+    };
+    const TUNES = [
+      ['decelOn', 'decel on (mph/s)', .1, 8, .1], ['decelDebounce', 'decel debounce (ms)', 0, 600, 10],
+      ['stopSpeed', 'stop speed (mph)', .1, 4, .1], ['movingSpeed', 'moving speed (mph)', .5, 10, .1],
+      ['accelOff', 'accel off (mph/s)', .1, 5, .1], ['accelOffMinSpeed', 'accel-off min speed', 0, 15, .1],
+      ['steadyBand', 'steady band (mph/s)', .1, 3, .05], ['steadyTimeout', 'steady timeout (ms)', 100, 5000, 50],
+      ['stopTimeout', 'stop timeout (ms)', 1000, 120000, 1000], ['minDwell', 'state min dwell (ms)', 0, 1000, 10],
+      ['speedSmooth', 'speed smoothing (ms)', 0, 400, 10]
+    ];
+    const state = { log: null, t: 0, playing: false, rate: 1, lastFrame: 0, view: [0, 1], drag: null, frameWindowAt: NaN, frameAt: NaN };
+    const GAUGE_CONFIG = {
+      speed: { min: 0, max: 60, color: COLORS.cyan, labels: [0, 30, 60] },
+      accel: { min: -10, max: 10, color: COLORS.orange, labels: [-10, 0, 10] },
+      rpm: { min: 0, max: 8000, color: COLORS.gold, labels: [0, 4000, 8000] },
+      throttle: { min: 0, max: 100, color: COLORS.blue, labels: [0, 50, 100] }
+    };
+    const gauges = {};
+    let gaugesInitialized = false;
+
+    const finite = n => Number.isFinite(n);
+    const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+    const formatTime = seconds => {
+      seconds = Math.max(0, seconds || 0); const m = Math.floor(seconds / 60); const s = seconds - m * 60;
+      return `${String(m).padStart(2, '0')}:${s.toFixed(3).padStart(6, '0')}`;
+    };
+    const nice = (n, digits = 1) => finite(n) ? n.toFixed(digits) : '—';
+    const binarySearchLast = (series, t) => { let lo = 0, hi = series.length - 1, best = -1; while (lo <= hi) { const mid = (lo + hi) >> 1; if (series[mid].t <= t) { best = mid; lo = mid + 1; } else hi = mid - 1; } return best; };
+
+    function parseTrace(text) {
+      const frames = [], signalEvents = { speed: [], throttle: [], rpm: [], rpmEcu: [], gear: [], clutch: [], cutoff: [] };
+      let malformed = 0, totalLines = 0, duration = 0;
+      for (const line of text.split(/\r?\n/)) {
+        totalLines++;
+        if (!line || line[0] === ';') continue;
+        const part = line.trim().split(/\s+/);
+        if (part.length < 8 || !/^\d+$/.test(part[0]) || !/^(DT|RR)$/i.test(part[2])) { if (line.trim()) malformed++; continue; }
+        const ms = Number(part[1]), id = Number.parseInt(part[4], 16), dlc = Number(part[7]);
+        if (!finite(ms) || !/^[0-9a-f]+$/i.test(part[4]) || !Number.isInteger(id) || !Number.isInteger(dlc) || dlc < 0 || dlc > 64 || part.length < 8 + dlc) { malformed++; continue; }
+        const data = []; let valid = true;
+        for (let i = 0; i < dlc; i++) { const token = part[8 + i], byte = Number.parseInt(token, 16); if (!/^[0-9a-f]{1,2}$/i.test(token) || !Number.isInteger(byte) || byte < 0 || byte > 255) valid = false; data.push(byte); }
+        if (!valid) { malformed++; continue; }
+        const t = ms / 1000; duration = Math.max(duration, t);
+        frames.push({ t, id, dir: part[5], dlc, data });
+        if (id === 0x102 && data.length >= 3) signalEvents.speed.push({ t, v: ((data[1] * 256 + data[2]) / 16) * MPH_PER_KMH });
+        if (id === 0x140) { if (data.length >= 1) signalEvents.throttle.push({ t, v: data[0] / 2.55 }); if (data.length >= 7) signalEvents.rpm.push({ t, v: data[6] * 31.4 }); }
+        if (id === 0x142) { if (data.length >= 4) signalEvents.gear.push({ t, v: data[3] & 0x0f }); if (data.length >= 6) signalEvents.clutch.push({ t, v: (data[5] & 0x0f) ? 1 : 0 }); }
+        if (id === 0x146 && data.length >= 4) signalEvents.rpmEcu.push({ t, v: ((data[2] * 256 + data[3]) & 0x3fff) * .25 });
+        if (id === 0x121 && data.length >= 7) signalEvents.cutoff.push({ t, v: ((data[3] & 0x40) && data[6] === 0x28) ? 1 : 0 });
+      }
+      if (!frames.length) throw new Error('No PCAN data records were found. Expected TRC 2.1 rows with DT or RR frames.');
+      const n = Math.max(1, Math.floor(duration / DT) + 1), times = new Float64Array(n);
+      for (let i = 0; i < n; i++) times[i] = Math.min(duration, i * DT);
+      const resample = (events, fill = 0) => { const out = new Float64Array(n); let p = 0, current = fill; for (let i = 0; i < n; i++) { while (p < events.length && events[p].t <= times[i] + 1e-9) current = events[p++].v; out[i] = current; } return out; };
+      const rawSpeedT = Float64Array.from(signalEvents.speed, e => e.t * 1000), rawSpeedV = Float64Array.from(signalEvents.speed, e => e.v);
+      const log = { frames, totalLines, malformed, duration, times, rawSpeedT, rawSpeedV, hasSpeed: signalEvents.speed.length > 0, speed: resample(signalEvents.speed), throttle: resample(signalEvents.throttle), rpm: resample(signalEvents.rpm), rpmEcu: resample(signalEvents.rpmEcu), gear: resample(signalEvents.gear), clutch: resample(signalEvents.clutch), cutoff: resample(signalEvents.cutoff), tunes: { ...DEFAULTS } };
+      recalculate(log);
+      return log;
+    }
+
+    function deriveAccel(rawT, rawV, times, tau) {
+      const smoothed = new Float64Array(rawV.length); if (!rawV.length) return new Float64Array(times.length).fill(NaN);
+      smoothed[0] = rawV[0];
+      for (let i = 1; i < rawV.length; i++) { const dt = rawT[i] - rawT[i - 1]; const a = tau <= 0 || dt <= 0 ? 1 : 1 - Math.exp(-dt / tau); smoothed[i] = smoothed[i - 1] + a * (rawV[i] - smoothed[i - 1]); }
+      const eventAccel = new Float64Array(rawV.length); eventAccel.fill(NaN); const ringT = new Float64Array(32), ringV = new Float64Array(32); let head = 0, count = 0, primed = false, accel = NaN;
+      for (let k = 0; k < rawV.length; k++) { const now = rawT[k]; ringT[head] = now; ringV[head] = smoothed[k]; head = (head + 1) % 32; count = Math.min(32, count + 1); let best = -1; for (let i = 0; i < count; i++) { const index = (head + 31 - i) % 32; if (now - ringT[index] >= 200) { best = index; break; } } if (best >= 0) { const dt = (now - ringT[best]) / 1000; if (dt > 0) { const slope = (smoothed[k] - ringV[best]) / dt; accel = primed ? accel + .3 * (slope - accel) : slope; primed = true; } } eventAccel[k] = accel; }
+      const out = new Float64Array(times.length); let p = 0, current = NaN; for (let i = 0; i < times.length; i++) { while (p < rawT.length && rawT[p] / 1000 <= times[i] + 1e-9) current = eventAccel[p++]; out[i] = current; } return out;
+    }
+
+    function runFsm(log) {
+      const { tunes: u, speed, accel, clutch, gear } = log, out = new Uint8Array(log.times.length); let current = 0, since = 1e12, decelHold = 0, steadyHold = 0, stoppedHold = 0;
+      for (let i = 0; i < out.length; i++) { const ac = accel[i], valid = finite(ac), sp = speed[i]; decelHold = valid && ac < -u.decelOn ? decelHold + 20 : 0; steadyHold = current === 1 && valid && Math.abs(ac) < u.steadyBand ? steadyHold + 20 : 0; stoppedHold = current === 2 ? stoppedHold + 20 : 0; let next = current;
+        if (since >= u.minDwell) { if (current === 0) { if (decelHold >= u.decelDebounce) next = 1; else if (sp < u.stopSpeed) next = 2; } else if (current === 1) { if (sp < u.stopSpeed) next = 2; else if (valid && ac > u.accelOff && sp > u.accelOffMinSpeed) next = 0; else if (steadyHold >= u.steadyTimeout) next = 0; } else { if (sp > u.movingSpeed || (clutch[i] === 0 && gear[i] !== 0 && sp > u.stopSpeed) || stoppedHold >= u.stopTimeout) next = 0; } }
+        if (next !== current) { current = next; since = 0; decelHold = steadyHold = stoppedHold = 0; } else since += 20; out[i] = current; }
+      return out;
+    }
+
+    function recalculate(log) { log.accel = deriveAccel(log.rawSpeedT, log.rawSpeedV, log.times, log.tunes.speedSmooth); log.brake = log.hasSpeed ? runFsm(log) : new Uint8Array(log.times.length); let transitions = 0, on = 0; for (let i = 0; i < log.brake.length; i++) { if (log.brake[i]) on++; if (i && log.brake[i] !== log.brake[i - 1]) transitions++; } log.fsmStats = { transitions, onSeconds: on * DT, onFraction: on / log.brake.length }; }
+
+    function populateTuning() { els.tuning_grid.textContent = ''; for (const [key, label, min, max, step] of TUNES) { const wrap = document.createElement('div'), name = document.createElement('label'), input = document.createElement('input'); wrap.className = 'tune'; name.htmlFor = `tune-${key}`; name.textContent = label; input.id = `tune-${key}`; input.type = 'number'; input.min = min; input.max = max; input.step = step; input.value = DEFAULTS[key]; input.addEventListener('change', () => { if (!state.log) return; const value = Number(input.value); if (!finite(value)) { input.value = state.log.tunes[key]; return; } state.log.tunes[key] = clamp(value, min, max); input.value = state.log.tunes[key]; recalculate(state.log); updateAll(true); }); wrap.append(name, input); els.tuning_grid.append(wrap); } }
+
+    function chartContext(canvas) { const ratio = window.devicePixelRatio || 1, rect = canvas.getBoundingClientRect(), width = Math.max(1, Math.round(rect.width * ratio)), height = Math.max(1, Math.round(rect.height * ratio)); if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; } const ctx = canvas.getContext('2d'); ctx.setTransform(ratio, 0, 0, ratio, 0, 0); return { ctx, w: rect.width, h: rect.height }; }
+    function viewportIndex(log, t) { return clamp(Math.round(t / DT), 0, log.times.length - 1); }
+    function drawGrid(ctx, x, y, w, h, min, max, marks = 4) { ctx.strokeStyle = COLORS.grid; ctx.fillStyle = COLORS.muted; ctx.lineWidth = 1; ctx.font = '11px ui-monospace, monospace'; for (let m = 0; m <= marks; m++) { const yy = y + h - (m / marks) * h, val = min + (m / marks) * (max - min); ctx.globalAlpha = .58; ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x + w, yy); ctx.stroke(); ctx.globalAlpha = 1; ctx.fillText(val.toFixed(max - min < 10 ? 1 : 0), 4, yy + 4); } }
+    function tracePath(ctx, values, log, start, end, x, y, w, h, min, max, color, alpha = 1) { const i0 = viewportIndex(log, start), i1 = viewportIndex(log, end), count = i1 - i0 + 1, buckets = Math.max(1, Math.floor(w)); const step = Math.max(1, Math.ceil(count / buckets)); ctx.strokeStyle = color; ctx.globalAlpha = alpha; ctx.lineWidth = 1.35; ctx.beginPath(); let begun = false; for (let first = i0; first <= i1; first += step) { let lo = Infinity, hi = -Infinity; const last = Math.min(i1, first + step); for (let i = first; i <= last; i++) { const v = values[i]; if (finite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } } if (!finite(lo)) continue; const px = x + ((first - i0) / Math.max(1, count - 1)) * w; const pyHi = y + h - clamp((hi - min) / (max - min), 0, 1) * h, pyLo = y + h - clamp((lo - min) / (max - min), 0, 1) * h; if (!begun) { ctx.moveTo(px, pyHi); begun = true; } else ctx.lineTo(px, pyHi); if (pyLo !== pyHi) ctx.lineTo(px, pyLo); } ctx.stroke(); ctx.globalAlpha = 1; }
+    function scaledRange(values, i0, i1, low = 0, padding = .12) { let min = Infinity, max = -Infinity; for (let i = i0; i <= i1; i++) if (finite(values[i])) { min = Math.min(min, values[i]); max = Math.max(max, values[i]); } if (!finite(min)) return [low, low + 1]; min = Math.min(low, min); const spread = Math.max(1, max - min); return [min - spread * padding, max + spread * padding]; }
+    function drawMainChart() { const log = state.log; if (!log) return; const { ctx, w, h } = chartContext(els.main_chart); ctx.fillStyle = COLORS.page; ctx.fillRect(0, 0, w, h); const pad = { l: 33, r: 14, t: 15, b: 24 }, x = pad.l, cw = w - pad.l - pad.r, chartH = h - pad.t - pad.b; const panes = [{ ratio: .60, label: 'speed / rpm / throttle' }, { ratio: .24, label: 'acceleration' }, { ratio: .16, label: 'brake light' }]; let y = pad.t; const [start, end] = state.view, i0 = viewportIndex(log, start), i1 = viewportIndex(log, end);
+      ctx.save(); ctx.beginPath(); ctx.rect(x, pad.t, cw, chartH); ctx.clip();
+      for (const pane of panes) { const ph = chartH * pane.ratio; ctx.fillStyle = COLORS.muted; ctx.font = '10px Inter, sans-serif'; ctx.fillText(pane.label, x + 6, y + 12); if (pane === panes[0]) { const [a, b] = scaledRange(log.speed, i0, i1); drawGrid(ctx, x, y, cw, ph, a, b); tracePath(ctx, log.speed, log, start, end, x, y, cw, ph, a, b, COLORS.cyan); const rpm100 = { length: log.rpm.length }; for (let i = i0; i <= i1; i++) rpm100[i] = log.rpm[i] / 100; tracePath(ctx, rpm100, log, start, end, x, y, cw, ph, a, b, COLORS.gold, .86); const throttle = { length: log.throttle.length }; for (let i = i0; i <= i1; i++) throttle[i] = log.throttle[i]; tracePath(ctx, throttle, log, start, end, x, y, cw, ph, a, b, COLORS.blue, .75); } else if (pane === panes[1]) { const [a, b] = scaledRange(log.accel, i0, i1, -Math.max(3, log.tunes.decelOn * 1.3)); drawGrid(ctx, x, y, cw, ph, a, b); const zero = y + ph - clamp((0 - a) / (b - a), 0, 1) * ph; ctx.strokeStyle = COLORS.grid; ctx.beginPath(); ctx.moveTo(x, zero); ctx.lineTo(x + cw, zero); ctx.stroke(); tracePath(ctx, log.accel, log, start, end, x, y, cw, ph, a, b, COLORS.red); const threshold = y + ph - clamp((-log.tunes.decelOn - a) / (b - a), 0, 1) * ph; ctx.setLineDash([4, 4]); ctx.strokeStyle = COLORS.orange; ctx.beginPath(); ctx.moveTo(x, threshold); ctx.lineTo(x + cw, threshold); ctx.stroke(); ctx.setLineDash([]); } else { const phInner = Math.max(1, ph - 7); for (let i = i0; i <= i1; i++) if (log.brake[i]) { const px = x + ((i - i0) / Math.max(1, i1 - i0)) * cw; const pw = cw / Math.max(1, i1 - i0); ctx.fillStyle = 'rgba(255,92,108,.70)'; ctx.fillRect(px, y + 7, Math.max(1, pw + 1), phInner); } ctx.strokeStyle = COLORS.grid; ctx.strokeRect(x, y + 7, cw, phInner); }
+        y += ph;
+      }
+      const px = x + ((state.t - start) / Math.max(.0001, end - start)) * cw; ctx.strokeStyle = COLORS.cursor; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, pad.t); ctx.lineTo(px, pad.t + chartH); ctx.stroke(); ctx.restore();
+      ctx.fillStyle = COLORS.muted; ctx.font = '11px ui-monospace, monospace'; ctx.fillText(formatTime(start), x, h - 6); const endText = formatTime(end); ctx.fillText(endText, x + cw - ctx.measureText(endText).width, h - 6);
+    }
+    function drawOverview() { const log = state.log; if (!log) return; const { ctx, w, h } = chartContext(els.overview_chart); ctx.fillStyle = COLORS.page; ctx.fillRect(0, 0, w, h); const x = 33, y = 9, cw = w - 47, ch = h - 25, i0 = 0, i1 = log.times.length - 1, [a, b] = scaledRange(log.speed, i0, i1); drawGrid(ctx, x, y, cw, ch, a, b, 2); tracePath(ctx, log.speed, log, 0, log.duration, x, y, cw, ch, a, b, COLORS.cyan); const left = x + (state.view[0] / Math.max(.001, log.duration)) * cw, right = x + (state.view[1] / Math.max(.001, log.duration)) * cw; ctx.fillStyle = COLORS.select; ctx.fillRect(left, y, Math.max(2, right - left), ch); ctx.strokeStyle = COLORS.blue; ctx.lineWidth = 1.5; ctx.strokeRect(left, y, Math.max(2, right - left), ch); const cursor = x + (state.t / Math.max(.001, log.duration)) * cw; ctx.strokeStyle = COLORS.cursor; ctx.beginPath(); ctx.moveTo(cursor, y); ctx.lineTo(cursor, y + ch); ctx.stroke(); ctx.fillStyle = COLORS.muted; ctx.font = '11px ui-monospace, monospace'; ctx.fillText('full trace', x, h - 5); }
+    function drawCharts() { drawMainChart(); drawOverview(); }
+
+    function seek(time, redraw = true) { if (!state.log) return; state.t = clamp(time, 0, state.log.duration); els.time_range.value = state.t; if (redraw) updateAll(); }
+    function initGauges() { if (gaugesInitialized) return; gaugesInitialized = true; for (const [name, config] of Object.entries(GAUGE_CONFIG)) { const gauge = new Gauge(METRIC.gauges[name]).setOptions({ angle: 0, lineWidth: .15, radiusScale: .92, pointer: { length: .59, strokeWidth: .035, color: config.color }, limitMax: true, limitMin: true, colorStart: config.color, colorStop: config.color, strokeColor: '#27394e', generateGradient: false, highDpiSupport: true, staticLabels: { font: '10px ui-monospace, SFMono-Regular, Menlo, monospace', labels: config.labels, color: COLORS.muted, fractionDigits: 0 } }); gauge.maxValue = config.max; gauge.setMinValue(config.min); gauges[name] = gauge; setGauge(name, config.min); } }
+    function setGauge(name, value) { const safeValue = finite(value) ? clamp(value, GAUGE_CONFIG[name].min, GAUGE_CONFIG[name].max) : GAUGE_CONFIG[name].min, gauge = gauges[name]; gauge.set(safeValue); gauge.displayedValue = safeValue; for (const pointer of gauge.gp) pointer.displayedValue = safeValue; gauge.ctx.clearRect(0, 0, gauge.canvas.width, gauge.canvas.height); gauge.render(); }
+    function updateMetrics() { const log = state.log, i = viewportIndex(log, state.t), accel = log.accel[i], brake = log.brake[i], speed = log.hasSpeed ? log.speed[i] : NaN, rpm = log.rpm[i], throttle = log.throttle[i], gaugeText = (value, unit, width = 5) => `<span class="numeric">${String(value).padStart(width, '\u00a0')}</span> <span class="unit">${unit}</span>`; setGauge('speed', speed); setGauge('accel', accel); setGauge('rpm', rpm); setGauge('throttle', throttle); METRIC.speed.innerHTML = gaugeText(log.hasSpeed ? nice(speed) : '—', 'mph', 4); METRIC.accel.innerHTML = gaugeText(finite(accel) ? (accel >= 0 ? '+' : '') + nice(accel) : '—', 'mph/s'); METRIC.rpm.innerHTML = gaugeText(Math.round(rpm).toLocaleString(), 'rpm'); METRIC.throttle.innerHTML = gaugeText(nice(throttle), '%'); const gear = Math.round(log.gear[i]), gearText = gear === 0 ? 'N' : (gear > 0 ? String(gear) : '—'); METRIC.gear.textContent = gearText; METRIC.gearStrip.setAttribute('aria-label', `Current gear: ${gearText}`); for (const box of METRIC.gearBoxes) box.classList.toggle('active', Number(box.dataset.gear) === gear); METRIC.gearDetail.textContent = `clutch ${log.clutch[i] ? 'IN' : 'OUT'} · cutoff ${log.cutoff[i] ? 'YES' : 'no'}`; METRIC.brake.textContent = ['OFF', 'BRAKING', 'STOPPED'][brake]; METRIC.brakeDetail.textContent = log.hasSpeed ? (brake ? 'simulated light ON' : 'simulated light off') : 'speed signal unavailable'; els.brake_card.classList.toggle('on', !!brake); els.brake_card.classList.toggle('off', !brake); els.time_readout.textContent = `${formatTime(state.t)} / ${formatTime(log.duration)}`; els.range_label.textContent = `${formatTime(state.view[0])} — ${formatTime(state.view[1])} · ${nice(state.view[1] - state.view[0])} s window`; }
+    function updateFrames(force = false) { const log = state.log; if (!force && Math.abs(state.t - state.frameWindowAt) < .04) return; state.frameWindowAt = state.t; const at = binarySearchLast(log.frames, state.t), begin = Math.max(0, at - 8), end = Math.min(log.frames.length, begin + 18); els.frame_rows.textContent = ''; for (let i = begin; i < end; i++) { const f = log.frames[i], tr = document.createElement('tr'); if (i === at) tr.className = 'current'; tr.innerHTML = `<td>${formatTime(f.t)}</td><td>0x${f.id.toString(16).toUpperCase().padStart(3, '0')}</td><td>${f.dir}</td><td>${f.dlc}</td><td>${f.data.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ')}</td>`; tr.addEventListener('click', () => seek(f.t)); els.frame_rows.append(tr); } els.frame_context.textContent = at >= 0 ? `frame ${at + 1} of ${log.frames.length.toLocaleString()}` : 'before first frame'; }
+    function updateAll(forceFrames = false) { if (!state.log) return; updateMetrics(); updateFrames(forceFrames); els.fsm_stats.textContent = `${state.log.fsmStats.transitions} transitions · light on ${nice(state.log.fsmStats.onSeconds)} s (${Math.round(state.log.fsmStats.onFraction * 100)}% of trace)`; drawCharts(); }
+    function setView(start, end, center = null) { const log = state.log, minWindow = Math.min(log.duration, 1); let width = Math.max(minWindow, end - start); if (width > log.duration) { start = 0; end = log.duration; } else { const c = center === null ? (start + end) / 2 : center; start = clamp(c - width / 2, 0, log.duration - width); end = start + width; } state.view = [start, end]; updateAll(); }
+    function canvasTime(canvas, event) { const rect = canvas.getBoundingClientRect(), x = clamp(event.clientX - rect.left, 33, rect.width - 14); return ((x - 33) / Math.max(1, rect.width - 47)) * state.log.duration; }
+    function installChartInteraction() { const main = els.main_chart, overview = els.overview_chart; main.addEventListener('pointerdown', e => { main.setPointerCapture(e.pointerId); state.drag = { target: 'main', startX: e.clientX, startT: state.view[0] + ((e.clientX - main.getBoundingClientRect().left - 33) / Math.max(1, main.getBoundingClientRect().width - 47)) * (state.view[1] - state.view[0]) }; }); main.addEventListener('pointermove', e => { if (!state.drag || state.drag.target !== 'main') return; const rect = main.getBoundingClientRect(), current = state.view[0] + ((e.clientX - rect.left - 33) / Math.max(1, rect.width - 47)) * (state.view[1] - state.view[0]); state.drag.currentT = clamp(current, state.view[0], state.view[1]); drawMainChart(); }); main.addEventListener('pointerup', e => { if (!state.drag || state.drag.target !== 'main') return; const d = state.drag; state.drag = null; if (Math.abs(e.clientX - d.startX) < 5) seek(d.startT); else { const a = Math.min(d.startT, d.currentT), b = Math.max(d.startT, d.currentT); if (b - a > .05) setView(a, b); } }); main.addEventListener('dblclick', () => setView(0, state.log.duration));
+      overview.addEventListener('pointerdown', e => { overview.setPointerCapture(e.pointerId); const t = canvasTime(overview, e); state.drag = { target: 'overview', startT: t }; }); overview.addEventListener('pointermove', e => { if (!state.drag || state.drag.target !== 'overview') return; state.drag.currentT = canvasTime(overview, e); drawOverview(); }); overview.addEventListener('pointerup', e => { if (!state.drag || state.drag.target !== 'overview') return; const d = state.drag; state.drag = null; const t = canvasTime(overview, e); if (Math.abs(t - d.startT) < .05) { const width = state.view[1] - state.view[0]; setView(t - width / 2, t + width / 2, t); seek(t); } else setView(Math.min(t, d.startT), Math.max(t, d.startT)); }); }
+    function applyLog(file, log) { state.log = log; state.t = 0; state.playing = false; state.view = [0, log.duration]; els.play.textContent = 'Play'; els.time_range.max = log.duration; els.time_range.step = DT; els.time_range.value = 0; els.file_name.textContent = file.name; els.drop_zone.hidden = true; els.viewer.hidden = false; const notices = []; if (log.malformed) notices.push(`${log.malformed.toLocaleString()} non-data line${log.malformed === 1 ? '' : 's'} were ignored while parsing.`); if (!log.hasSpeed) notices.push('No 0x102 wheel-speed frames were found; raw frames can still be inspected, but speed-derived brake simulation is unavailable.'); els.notice.hidden = !notices.length; els.notice.textContent = notices.join(' '); els.parse_status.innerHTML = `<strong>${log.frames.length.toLocaleString()}</strong> frames · ${formatTime(log.duration)} duration · ${log.rawSpeedT.length.toLocaleString()} speed samples · ${log.totalLines.toLocaleString()} source lines`; initGauges(); updateAll(true); requestAnimationFrame(() => updateAll(true)); }
+    async function loadFile(file) { if (!file) return; els.load_error.textContent = ''; if (!/\.trc$/i.test(file.name)) els.load_error.textContent = 'This does not have a .trc extension; attempting to parse it anyway.'; els.loading.hidden = false; els.loading_label.textContent = `Reading ${file.name}…`; try { const text = await file.text(); await new Promise(resolve => requestAnimationFrame(resolve)); els.loading_label.textContent = 'Decoding PCAN frames…'; await new Promise(resolve => setTimeout(resolve, 20)); applyLog(file, parseTrace(text)); } catch (error) { console.error(error); els.drop_zone.hidden = false; els.viewer.hidden = true; els.load_error.textContent = error instanceof Error ? error.message : 'Unable to parse this trace.'; } finally { els.loading.hidden = true; els.file_input.value = ''; } }
+    function frame(now) { if (state.playing && state.log) { const elapsed = Math.min(.25, (now - state.lastFrame) / 1000 || 0); if (state.t >= state.log.duration) { state.playing = false; els.play.textContent = 'Play'; } else seek(state.t + elapsed * state.rate); } state.lastFrame = now; requestAnimationFrame(frame); }
+    function installControls() { const open = () => els.file_input.click(); els.open_file.addEventListener('click', open); els.choose_file.addEventListener('click', open); els.file_input.addEventListener('change', e => loadFile(e.target.files[0])); for (const type of ['dragenter', 'dragover']) window.addEventListener(type, e => { e.preventDefault(); els.drop_zone.classList.add('dragover'); }); for (const type of ['dragleave', 'drop']) window.addEventListener(type, e => { e.preventDefault(); if (type === 'dragleave' && e.relatedTarget) return; els.drop_zone.classList.remove('dragover'); }); window.addEventListener('drop', e => { const files = [...e.dataTransfer.files]; const file = files.find(f => /\.trc$/i.test(f.name)) || files[0]; if (file) loadFile(file); }); els.reset_zoom.addEventListener('click', () => { if (state.log) setView(0, state.log.duration); }); els.play.addEventListener('click', () => { if (!state.log) return; if (state.t >= state.log.duration) seek(0); state.playing = !state.playing; els.play.textContent = state.playing ? 'Pause' : 'Play'; }); els.back.addEventListener('click', () => seek(state.t - 1)); els.forward.addEventListener('click', () => seek(state.t + 1)); els.time_range.addEventListener('input', () => seek(Number(els.time_range.value))); els.rate.addEventListener('change', () => state.rate = Number(els.rate.value)); window.addEventListener('keydown', e => { if (!state.log || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return; if (e.code === 'Space') { e.preventDefault(); els.play.click(); } if (e.key === 'ArrowLeft') { e.preventDefault(); seek(state.t - (e.shiftKey ? 10 : 1)); } if (e.key === 'ArrowRight') { e.preventDefault(); seek(state.t + (e.shiftKey ? 10 : 1)); } if (e.key === 'Home') { e.preventDefault(); seek(0); } if (e.key === 'End') { e.preventDefault(); seek(state.log.duration); } }); const redraw = () => drawCharts(); new ResizeObserver(redraw).observe(els.main_chart); }
+    populateTuning(); installControls(); installChartInteraction(); requestAnimationFrame(frame);
+  })();
+  </script>
+</body>
+</html>
