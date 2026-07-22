@@ -2,9 +2,15 @@
 
 **Open-sourCe Helmet-Mounted Brake Light** for motorcyclists.
 
-A battery-powered LED bar mounts on the back of the rider's helmet and lights up
-when the motorcycle is braking. Brake state is derived from the bike's **CAN bus**
-(via the diagnostic port) and sent wirelessly to the helmet over **ESP-NOW**.
+A battery-powered LED bar worn on the rider's back — magnetically clamped to a
+**jacket or backpack** between the shoulder blades — lights up when the motorcycle
+is braking. Brake state is derived from the bike's **CAN bus** (via the diagnostic
+port) and sent wirelessly to the rider-side unit over **ESP-NOW**.
+
+> The name is aspirational: helmet fitment is deferred for the first build (shell
+> curvature + helmet certification make it a harder problem). The rider-side
+> hardware currently targets the **fabric attachment** case only — see
+> [`docs/hardware.md §2`](docs/hardware.md#2-brake_light-rider-side).
 
 > ⚠️ **Read [`docs/safety-regulatory.md`](docs/safety-regulatory.md) first.**
 > This is an **auxiliary** light. It does not replace the motorcycle's own legally
@@ -43,7 +49,7 @@ above. See [§4](#4-braking-state-machine) for the resulting state machine.
 ## 2. System overview
 
 ```
-        MOTORCYCLE                                  HELMET
+        MOTORCYCLE                              RIDER (jacket / pack)
  ┌──────────────────────────┐              ┌───────────────────────────┐
  │  6-pin diagnostic port    │              │  RX unit                  │
  │     │ CAN-H / CAN-L        │              │  ┌─────────────────────┐  │
@@ -55,10 +61,10 @@ above. See [§4](#4-braking-state-machine) for the resulting state machine.
  │  │    listen-only)    │     │              │  │  • battery monitor  │  │
  │  │  • bike-profile    │     │              │  └─────────┬───────────┘  │
  │  │    decoder         │     │              │            ▼              │
- │  │  • state machine   │     │              │     Red LED bar +         │
- │  │  • ESP-NOW TX       │     │              │     LED driver           │
- │  └───────────────────┘     │              │     LiPo + USB-C charge   │
- │  Powered from bike (12 V)   │              │  Self-powered (battery)   │
+ │  │  • state machine   │     │              │     ~8″ red LED bar       │
+ │  │  • ESP-NOW TX       │     │              │     + LED driver         │
+ │  └───────────────────┘     │              │     1S 18650 + USB-C      │
+ │  Powered from bike (12 V)   │              │  Magnetic to fabric       │
  └──────────────────────────┘              └───────────────────────────┘
 ```
 
@@ -67,7 +73,7 @@ Two independent units:
 | Unit | Lives on | Power | Job |
 |------|----------|-------|-----|
 | **`transmitter/`** (bike-side, "TX") | Plugs into the diagnostic port | Bike 12 V (switched) | Sniff CAN, decode brake/RPM/throttle/clutch, run the braking state machine, broadcast state over ESP-NOW |
-| **`brake_light/`** (helmet-side, "RX") | Mounted on the helmet shell | On-board LiPo, USB-C charge | Receive state, drive the LED bar with the right pattern/brightness, manage battery & link health |
+| **`brake_light/`** (rider-side, "RX") | Magnetically clamped to the jacket / backpack (helmet fitment deferred) | On-board 1S 18650 Li-ion, USB-C charge | Receive state, drive the ~8″ LED bar with the right pattern/brightness, manage battery & link health |
 
 > Throughout these docs "TX" = the `transmitter` unit and "RX" = the `brake_light` unit.
 
@@ -194,9 +200,11 @@ These are hard requirements, expanded in [`docs/safety-regulatory.md`](docs/safe
    disturbing the motorcycle's own ECUs.
 2. **Auxiliary, not a replacement.** Open-CHMBL never substitutes for the bike's
    factory brake light.
-3. **Helmet integrity.** Non-penetrating mount (adhesive pad / strap); never drill a
-   helmet. Keep mass low and mount **frangible/breakaway** to limit rotational
-   injury and snag risk.
+3. **Mount safety.** Baseline fabric mount uses **magnets that peel off** under
+   shear — the magnetic interface *is* the frangible/breakaway release, satisfying
+   the safety doc's snag-and-crash requirements without a separate breakaway pin.
+   Keep mass low. The **helmet variant** (deferred) inherits the same hard rule:
+   non-penetrating only, never drill the shell.
 4. **No false braking, no strobing.** Failsafes bias toward an honest, non-alarming
    state. Flashing patterns are disabled by default for legal reasons.
 5. **Parasitic draw.** The TX must sleep / cut load when the bike is off so it can't
@@ -227,7 +235,7 @@ open-chmbl/
 ├── transmitter/               ← bike-side unit
 │   ├── hardware/              ← schematics, BOM, connector, enclosure
 │   └── software/              ← ESP32 firmware (TWAI listen-only + ESP-NOW TX)
-└── brake_light/               ← helmet-side unit
+└── brake_light/               ← rider-side unit (fabric mount this rev)
     ├── hardware/              ← LED bar, LiPo+charge, mount, enclosure
     └── software/              ← ESP32 firmware (ESP-NOW RX + LED engine)
 ```

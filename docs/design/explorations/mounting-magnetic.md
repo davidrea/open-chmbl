@@ -1,9 +1,11 @@
 # Exploration — Magnetic mounting
 
-**Status:** 💭 future-state exploration (not in the [build order](../README.md#3-design-elements-build-order)) ·
-**Device:** brake_light · **Supersedes nothing yet** — the adhesive/strap breakaway
-mount in [`hardware.md §2`](../../hardware.md#2-brake_light-helmet-side) remains the
-baseline until one of these is promoted to a real `de-*` element.
+**Status:** **Exploration A (garment / backpack shoulder mount) is now the current
+baseline** for the brake_light hardware form factor — see
+[`hardware.md §2`](../../hardware.md#2-brake_light-rider-side). It has not yet been
+promoted to a proper `de-*` design element; the sizing / retention-force / clean-
+release work still lives here. **Exploration B (helmet-interchangeable magnetic
+mount) remains 💭 future-state** — helmet fitment is deferred for this rev.
 
 Two related ideas, both built on the same insight: **a magnetic interface gives us a
 shear/peel release "for free."** A magnet pair holds firmly in normal use but lets go
@@ -338,6 +340,6 @@ mechanical interface.
 ## What promotion would look like
 To become a real `de-*` design element this needs: a chosen variant (A, B, or both as
 options), measured hold/release forces against defined targets, a temperature-validated
-magnet spec, and a mechanical interface to the [enclosure](../../hardware.md#2-brake_light-helmet-side).
+magnet spec, and a mechanical interface to the [enclosure](../../hardware.md#2-brake_light-rider-side).
 Until then it stays here as a direction, and the adhesive/strap breakaway mount remains
 the baseline.

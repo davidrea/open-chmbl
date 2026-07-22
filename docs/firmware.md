@@ -10,7 +10,7 @@ library.
 
 ```
 transmitter/software/   ← bike-side firmware
-brake_light/software/   ← helmet-side firmware
+brake_light/software/   ← rider-side firmware
 (shared protocol + profile structs are duplicated or symlinked between them;
  see roadmap for the mono-repo decision)
 ```
@@ -158,7 +158,7 @@ typedef struct {
 
 ---
 
-## 2. Brake_light firmware (helmet-side)
+## 2. Brake_light firmware (rider-side)
 
 Responsibilities: receive state, render LEDs, dim for ambient light, monitor
 battery, manage pairing and link-loss.

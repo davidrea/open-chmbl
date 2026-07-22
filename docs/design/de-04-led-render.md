@@ -11,7 +11,7 @@ brightness → a steady pattern and a current setpoint) and the **driver hardwar
 
 ## 1. Scope & isolation boundary
 - **In:** the state→pattern map, the anti-strobe floor, the brightness→current/duty
-  mapping, and the driver stage that converts a 1S LiPo into a regulated LED current.
+  mapping, and the driver stage that converts a 1S Li-ion cell into a regulated LED current.
 - **Out (faked at edges):** the braking *state* is injected with `in set state` (the
   real source is the link, DE-01/DE-03); the *commanded brightness* is injected with
   `ambient set` / `render` (the real source is DE-02); the **status-indicator** LED is a
@@ -29,7 +29,9 @@ thermal/current limits). Viewed through BL-CLI-4.
 
 ### 3.1 Drive topology — series string + boost CC
 
-The supply is a **1S LiPo: 3.0 V (cutoff) → 4.2 V (full)**, ~3.7 V nominal. A
+The supply is a **1S Li-ion cell (18650 baseline): 3.0 V (cutoff) → 4.2 V (full)**,
+~3.7 V nominal — the same electrical envelope as the earlier 1S LiPo, so the
+topology analysis below is unchanged. A
 high-brightness red LED has a forward voltage of **~2.0–2.5 V**, which sits *inside*
 the battery range. That makes the per-LED count the real design lever:
 

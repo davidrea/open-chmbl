@@ -8,7 +8,7 @@ requirements. Each **feature** (a capability area) has an ID and a set of
 can be exercised in isolation.
 
 ID scheme: `TX-<area>-<n>` for the transmitter (bike-side), `BL-<area>-<n>` for the
-brake_light (helmet-side).
+brake_light (rider-side).
 
 ---
 
@@ -72,10 +72,10 @@ brake_light (helmet-side).
 
 ---
 
-## Brake_light (helmet-side)
+## Brake_light (rider-side)
 
 ### BL-PWR — Power & battery
-- BL-PWR-1 — Run from a 1S LiPo.
+- BL-PWR-1 — Run from a 1S Li-ion 18650 (protected cell).
 - BL-PWR-2 — Charge over USB-C with **load sharing** (operate while charging).
 - BL-PWR-3 — Measure state-of-charge (fuel gauge / ADC).
 - BL-PWR-4 — Warn on low battery and cut off at the protection threshold.
@@ -112,7 +112,7 @@ brake_light (helmet-side).
 ### BL-IND — Status indicator LED
 A **small dedicated indicator**, separate from the main brake-light array, for
 discrete status and fault reporting. Maps cleanly onto a single addressable RGB LED
-(WS2812-class) — see [`hardware.md §2`](hardware.md#2-brake_light-helmet-side).
+(WS2812-class) — see [`hardware.md §2`](hardware.md#2-brake_light-rider-side).
 - BL-IND-1 — Drive a status-indicator LED that is **independent of the main LED bar**
   (a fault is legible even when the bar is off, dim, or itself the problem).
 - BL-IND-2 — Convey discrete states by **color and/or blink code** (e.g. pairing,

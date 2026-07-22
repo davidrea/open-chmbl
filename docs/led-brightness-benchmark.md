@@ -136,7 +136,7 @@ efficacy is high and the color reads unambiguously as a brake signal. **Avoid de
 (≈ 660 nm)** horticulture/IR-adjacent emitters: they look dim per watt to the eye and
 sit at the edge of/outside the legal stop-red region. A red emitter (not a white LED
 behind a red lens) is also the simplest legal-color story — matching the lean already in
-[`hardware.md §2`](hardware.md#2-brake_light-helmet-side).
+[`hardware.md §2`](hardware.md#2-brake_light-rider-side).
 
 ### 5.2 Architecture trade — three candidates
 

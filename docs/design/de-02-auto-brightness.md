@@ -19,7 +19,7 @@ BL-BRT-1…4.
 
 ## 3. Component selection
 Ambient-light sensor (digital lux sensor over I²C, or analog photodiode + ADC) — see
-[`hardware.md §2`](../hardware.md#2-brake_light-helmet-side). Selection TBD.
+[`hardware.md §2`](../hardware.md#2-brake_light-rider-side). Selection TBD.
 
 ## 4. I/O assignments & configuration
 - Sensor bus/pin, sample rate (~5 Hz), lux range.

@@ -6,9 +6,11 @@ A **small dedicated indicator LED**, separate from the main brake-light array, t
 reports device status and faults by **color and/or blink code**. The point is *discrete
 diagnostics*: a rider (or bench tech) can read pairing, link, charge, and fault state
 without leaning on the main bar — which may be off, dimmed, or itself the thing that's
-broken. Maps naturally onto a single addressable RGB LED (WS2812-class), including the
-**onboard WS2812 found on several candidate ESP32-C3 modules** (see
-[`hardware.md §2`](../hardware.md#2-brake_light-helmet-side)).
+broken. Maps naturally onto a single addressable RGB LED (WS2812-class), placed
+**chip-down** on the brake_light PCB (`WS2812B-2020` / `WS2812B-Mini`) — the
+brake_light now uses a **bare ESP32-C3-WROOM-02 module**, so the earlier "reuse a
+dev-board's onboard WS2812" path is no longer on the table. See
+[`hardware.md §2`](../hardware.md#2-brake_light-rider-side).
 
 ## 1. Scope & isolation boundary
 - **In:** the status-code model (enum of states → color/blink pattern), the indicator
@@ -25,12 +27,13 @@ broken. Maps naturally onto a single addressable RGB LED (WS2812-class), includi
 BL-IND-1…5 (and BL-CLI-6 for the hook). Realizes the indicator behind BL-UI-2.
 
 ## 3. Component selection
-One **addressable RGB LED** (WS2812/SK6812-class) on a single GPIO, **or** the
-**module's onboard WS2812** if the chosen ESP32-C3 board carries one — that's the whole
-point of the [integrated-module survey](../hardware.md#21-integrated-module-candidates-ws2812--lipo-charger):
-the status indicator is "free" on those boards. A plain mono LED could stand in but
-loses the color channel. WS2812B variants are stocked at LCSC (`C2761795`, `C114586`,
-small `WS2812B-2020`/`-Mini` for a low-profile indicator).
+One **addressable RGB LED** (WS2812/SK6812-class) on a single GPIO, placed
+**chip-down** on the brake_light PCB. A plain mono LED could stand in but loses the
+color channel. Baseline part: `WS2812B-2020` or `WS2812B-Mini` for a low-profile
+indicator (LCSC `C2761795`, `C114586`). The earlier "reuse the module's onboard
+WS2812 for free" option was retired when the brake_light moved to a bare
+`ESP32-C3-WROOM-02` module + chip-down BOM
+([`hardware.md §2.1`](../hardware.md#21-parts-direction-bare-module--chip-down)).
 
 ## 4. I/O assignments & configuration
 - One digital GPIO (WS2812 data); shares the same RMT/driver approach as the main bar.
@@ -59,7 +62,8 @@ small `WS2812B-2020`/`-Mini` for a low-profile indicator).
 ## 8. Open items
 - Final **code table** (which states, which colors/blinks) — define alongside DE-03
   (link) and DE-05 (battery) so their faults have assigned codes.
-- Whether to reuse the module's onboard WS2812 vs. place a dedicated indicator where
-  the rider can actually see it (module LED may be buried in the enclosure).
+- Placement of the chip-down WS2812 in the ~8″-wide enclosure so the rider (or a
+  bench tech) can actually see it — off-axis from the main bar, on a face the wearer
+  can glance at, with a small light pipe / diffuser if needed.
 - Color-blind-friendly coding (lean on **blink patterns**, not color alone, for the
   safety-relevant distinctions).

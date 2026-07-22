@@ -1,7 +1,8 @@
 # Hardware
 
-Two boards: the **transmitter** (bike-side) and the **brake_light** (helmet-side).
-Everything here is a first-pass sketch to size the design — not a finalized BOM.
+Two boards: the **transmitter** (bike-side) and the **brake_light** (rider-side —
+fabric-mounted, this rev). Everything here is a first-pass sketch to size the design
+— not a finalized BOM.
 
 ---
 
@@ -61,45 +62,64 @@ peripheral.
 
 ---
 
-## 2. Brake_light (helmet-side)
+## 2. Brake_light (rider-side)
 
 Self-contained, battery powered, charges over USB-C. This is the part the rider
 sees and touches, so usability (charging, on/off, brightness) matters.
 
+**Form factor** (this rev): a **thin, short (vertical, viewed from the rear), wide
+~8″ LED bar** that clamps magnetically to the outside of a **jacket or backpack**,
+between the shoulder blades — a thin steel strip or washers inside the garment /
+pack completes the mount. Helmet fitment and cross-form interchangeability are
+**deferred** so shell curvature and helmet-certification questions don't gate the
+first build. See the [garment / backpack mount exploration](design/explorations/mounting-magnetic.md#exploration-a--garment--backpack-shoulder-mount).
+
 ### Block diagram
 
 ```
- USB-C ──▶ Charge IC ──▶ LiPo ──▶ Load-share ──▶ Boost/LDO ──▶ 3V3 ──▶ ESP32-C3
- (5 V)    (w/ load     (1S)       path                        │
-          sharing)                                            ├─▶ LED driver ──▶ Red LED bar
- Ambient-light sensor ─────────────────────────────────────▶ │   (constant-current
- Fuel-gauge / ADC ─────────────────────────────────────────▶ │    or addressable)
-                                                              ├─▶ Mode/pair button
-                                                              └─▶ Status-indicator LED
-                                                                  (RGB WS2812, separate
-                                                                   from the bar)
+ USB-C ──▶ Charge IC ──▶ 1S 18650 ──▶ Load-share ──▶ Boost/LDO ──▶ 3V3 ──▶ ESP32-C3
+ (5 V)    (MCP73871,     (protected     path                       │       (bare
+          chip-down)      cell)                                    │        WROOM-02
+                                                                    │        module)
+ Ambient-light sensor ─────────────────────────────────────────▶ │
+ Fuel-gauge / ADC ─────────────────────────────────────────────▶ │
+                                                                    ├─▶ LED driver ──▶ ~8″ red LED bar
+                                                                    │   (LM3410 boost CC,
+                                                                    │    chip-down)
+                                                                    ├─▶ Mode/pair button
+                                                                    └─▶ Status WS2812
+                                                                        (2020/Mini,
+                                                                         chip-down,
+                                                                         separate from bar)
 ```
+
+Everything except the ESP32-C3 module itself is **chip-down** on the brake_light PCB
+— the earlier "grab a dev board with the charger already on it" path (removed §2.1
+survey) is dropped in favor of an integrated design that fits the thin/wide form
+factor.
 
 ### Parts (sketch)
 
 | Function | Candidate part | Notes |
 |----------|---------------|-------|
-| MCU + radio | **ESP32-C3** | Same family as TX simplifies firmware/build. |
-| Battery | **1S LiPo**, ~1000–2000 mAh | Size for runtime target (below). Protected cell. |
-| Charge IC | **MCP73871** (or TP4056 + load-share) | MCP73871 does **load sharing** so the light works while charging. TP4056 is cheaper but no load share. |
-| USB-C | USB-C receptacle w/ CC resistors | 5 V sink only; add ESD protection. |
-| LED array | **Discrete 620–630 nm red** (mid-power 2835/3030, ~8–12 emitters) in series string(s) + **boost constant-current driver** | Emitter/flux **down-selected** in [`led-brightness-benchmark.md`](led-brightness-benchmark.md) (~50–80 cd daylight, ~60–100 lm installed red); series-string + boost **topology** worked out in [`de-04`](design/de-04-led-render.md). Series count per string is capped by the driver's V<sub>out</sub> ceiling (≤ ~8 mid-power reds ≈ 18 V for LM3410's 24 V); split into parallel strings beyond that. Addressable RGB is too dim per-pixel for the bar → status indicator only. |
-| LED driver IC | **TI LM3410(X)** boost CC | 2.7–5.5 V in (uses the full 1S discharge), 2.8 A/**24 V** integrated switch, PWM + analog dim, OVP/thermal; ~$1.5, LCSC. The 24 V ceiling caps a single string at ~8 mid-power reds — tall single strings (10–12) or higher V<sub>out</sub> want the upgrade parts: ADI **LT3922‑1** (synchronous 34 V, spread-spectrum, AEC‑Q100) or LCSC-native **DIO5661** (37 V). **MAX16833 rejected** (5 V Vin-min — can't run on 1S). [`de-04 §3.3`](design/de-04-led-render.md). |
+| MCU + radio | **ESP32-C3-WROOM-02** (bare module) | Same C3 family as before; module rather than dev-board so we can lay the PCB flat and thin. Placed as-is, no dev-board freebies. |
+| Battery | **1S 18650 Li-ion, protected cell**, ~3000 mAh typical | Cylindrical Li-ion chosen over pouch/LiPo because pouch cells need compression the thin enclosure can't provide. Protected cell means the load-share IC does **not** need to double as cell protection. **18 mm diameter sets the enclosure-thickness floor.** |
+| Cell attach | **Undecided — open question** | Three viable options: **Keystone 1043** (low-profile top-mount holder — user-swappable, adds ~1–2 mm over cell diameter), **Keystone 54** (end clips only — thinnest; cell sits on the PCB but enclosure has to open for swap), or **cell with a factory JST-PH pigtail** (no board footprint; swap requires re-plugging inside the sealed enclosure). Decide during enclosure design; all three preserve the same charger / load-share design. |
+| Charge IC | **MCP73871** (chip-down) | Does **load sharing** so the light runs while charging from USB-C. Directly-placed part, not a module. |
+| USB-C | USB-C receptacle w/ CC resistors + ESD protection | 5 V sink only. |
+| LED array | **Discrete 620–630 nm red** (mid-power 2835/3030, ~8–12 emitters) laid out linearly along the **~8″ bar** in series string(s) + **boost constant-current driver** | Emitter/flux **down-selected** in [`led-brightness-benchmark.md`](led-brightness-benchmark.md) (~50–80 cd daylight, ~60–100 lm installed red); series-string + boost **topology** in [`de-04`](design/de-04-led-render.md). Series count per string capped by the driver's V<sub>out</sub> ceiling (≤ ~8 mid-power reds ≈ 18 V for LM3410's 24 V); split into parallel strings beyond that. Addressable RGB is too dim per-pixel for the bar → status indicator only. |
+| LED driver IC | **TI LM3410(X)** boost CC (chip-down) | 2.7–5.5 V in (uses the full 1S Li-ion discharge, 3.0–4.2 V), 2.8 A / **24 V** integrated switch, PWM + analog dim, OVP/thermal; ~$1.5, LCSC. 24 V ceiling caps a single string at ~8 mid-power reds — tall single strings (10–12) or higher V<sub>out</sub> want the upgrade parts: ADI **LT3922‑1** (synchronous 34 V, spread-spectrum, AEC‑Q100) or LCSC-native **DIO5661** (37 V). **MAX16833 rejected** (5 V Vin-min — can't run on 1S). [`de-04 §3.3`](design/de-04-led-render.md). |
 | Brightness control | PWM dimming (driver DIM pin) + analog current trim + **ambient light sensor** | Night brightness must not blind following drivers; day brightness must be visible in sun. Auto-dim is a real safety feature, not a nicety. Day/night intensity endpoints (~50–80 cd → ~5–15 cd) set in [`led-brightness-benchmark.md §4`](led-brightness-benchmark.md#4-design-target-for-the-helmet-bar). Keep dimming PWM > flicker fusion — distinct from the illegal *flashing*. |
 | Battery monitor | Fuel gauge IC or ADC divider | Low-battery warning pattern + cutoff. |
 | User I/O | One button | Power, pairing, brightness cycle. |
-| Status indicator | **Addressable RGB LED** (WS2812-class), **separate from the main bar** | Discrete status/fault by **color + blink code** (pairing, link, charge, fault) — legible even when the bar is off. Can reuse a **module's onboard WS2812** (see §2.1). See [`de-10`](design/de-10-status-indicator.md). |
-| Mount (baseline) | Non-penetrating, **breakaway** | Adhesive pad or strap; see safety doc. **Never drill the helmet.** Magnetic shear-release variants are a [future-state exploration](design/explorations/mounting-magnetic.md). |
-| Enclosure | **IP65+**, low-profile, lightweight | Mass on a helmet contributes to neck load in a crash — minimize it. |
+| Status indicator | **Discrete WS2812B** (`WS2812B-2020` or `WS2812B-Mini`), chip-down, **separate from the main bar** | Chip-down since we're on a bare module now (no free onboard RGB). Discrete status/fault by **color + blink code** (pairing, link, charge, fault) — legible even when the bar is off. See [`de-10`](design/de-10-status-indicator.md). |
+| Mount (baseline) | **Magnetic to jacket / backpack fabric** — magnets in the light assembly, thin steel strip / washers inside the garment or pack | The magnetic interface is its own **shear / peel release**, satisfying the safety doc's breakaway requirement without a separate frangible pin. Sizing/pole geometry TBD. **No helmet target this rev**; helmet fitment stays in the [magnetic mount exploration](design/explorations/mounting-magnetic.md). |
+| Enclosure | **IP65+**, thin (governed by the 18650), short vertically, ~8″ wide | Low profile matters for on-body wear comfort and for staying below the rider's line of sight to the mirrors. |
 
 ### Runtime budgeting (worked example)
 
-LED current dominates. Rough sizing:
+LED current dominates. Rough sizing with a typical protected 18650 (~3000 mAh
+usable capacity, take ~85 % to end-of-life):
 
 ```
 Avg LED draw (mixed off/decel/brake, auto-dimmed)  ≈  120 mA
@@ -107,50 +127,40 @@ ESP32-C3 (RX mostly, modem on)                     ≈   30 mA
                                                    ----------
 System average                                     ≈  150 mA
 
-1500 mAh battery × ~0.85 usable / 150 mA           ≈  8.5 h
+3000 mAh × ~0.85 usable / 150 mA                   ≈  17 h
 ```
 
-That's a comfortable full-day-of-riding target. Brake events are brief and bright;
-the *average* is what sets runtime, so auto-dimming and an `OFF`/dim-running idle
-state matter a lot. Tune the battery size to the LED bar you choose.
+That comfortably covers multi-day riding between charges (versus ~8.5 h with the
+earlier 1500 mAh LiPo). Brake events are brief and bright; the *average* is what
+sets runtime, so auto-dimming and an `OFF`/dim-running idle state matter a lot.
+The extra headroom lets us hold the LED currents at the daylight-visibility target
+without shrinking the runtime story.
 
-### 2.1 Integrated module candidates (WS2812 + LiPo charger)
+### 2.1 Parts direction: bare module + chip-down
 
-To **cut the parts we have to design in**, we want a dev-board-style ESP32-C3 module
-that already carries **(a) a LiPo charger** (replaces the discrete charge IC / load-share
-design) and **(b) an onboard WS2812 addressable LED** (serves the
-[status indicator](design/de-10-status-indicator.md) for free). The main red brake bar
-stays external regardless — the onboard WS2812 is a *status* LED, not the bar (the
-legal-color/no-flash story keeps the bar as discrete red or its own addressable strip).
+**Decision:** the brake_light uses a **bare `ESP32-C3-WROOM-02` module** and places
+the charger, DC-DC, LED driver, status WS2812, and USB-C front-end **chip-down** on
+the brake_light PCB. The earlier dev-board-with-freebies survey (LOLIN C3 Pico,
+FireBeetle 2, XIAO C3, Olimex Lipo, etc.) is superseded and removed.
 
-**Reality check:** very few compact C3 boards carry **both** at once — most have one or
-the other. Survey of candidates (verify against the current datasheet before committing
-— vendors revise silently):
+Why the pivot:
 
-| Board | LiPo charger | Onboard WS2812 | Notes |
-|-------|:------------:|:--------------:|-------|
-| **LOLIN / Wemos C3 Pico** | ✅ | ✅ | Strongest "both onboard" candidate — D1-mini-class form, RGB + LiPo charging per vendor docs. **Confirm charger chip + RGB GPIO on the schematic.** |
-| **DFRobot FireBeetle 2 ESP32-C3** | ✅ | ❔ | FireBeetle 2 line pairs onboard charging with a WS2812 on some variants (confirmed on the ESP32-E); **confirm the C3 SKU specifically.** |
-| **DFRobot Beetle ESP32-C3** (DFR0868) | ✅ (TP4057) | ❌ | Coin-size, charger onboard, but **no** addressable RGB — would still need an external WS2812. |
-| **Seeed XIAO ESP32-C3** | ✅ (ETA4054, ~370 mA, JST-PH) | ❌ | Tiny, ubiquitous, great charger story; **only a red charge LED** — add an external WS2812 for the indicator. |
-| **Olimex ESP32-C3-DevKit-Lipo** | ✅ | ❌ (plain status LEDs) | **Open-source hardware** (a plus for this project); stocked at **LCSC** (`C17694452`, ~$6–7). |
-| **Waveshare ESP32-C3-Zero** | ❌ | ✅ (GPIO10) | RGB onboard, **no** charger — pair with an external charge IC. |
-| **ESP32-C3 SuperMini *Plus*** | ❌ | ✅ (GPIO8, shared w/ blue LED) | Cheap; RGB but no charger. (Plain "SuperMini" has neither RGB nor charger.) |
-| **Espressif ESP32-C3-DevKitC/M** | ❌ | ✅ | Reference devkit; WS2812 onboard, no charger. |
+- **Form factor.** The rider-side unit is now a **thin, wide (~8″), short-in-vertical
+  LED bar** that clamps magnetically to a jacket or backpack. That geometry wants a
+  flat, custom-shaped PCB with the LED bar and 18650 laid out on it — a piggybacked
+  dev board (with its own USB connector, headers, and vertical parts) doesn't fit.
+- **Chip-down parts are already in the family.** The load-share charger
+  (`MCP73871`), boost CC driver (`LM3410`), 3V3 buck, and WS2812B-2020 are all
+  LCSC-stocked and small enough to place in the bar's own outline. Skipping the
+  dev-board wrapper saves height and mm of board.
+- **Status indicator is no longer "free."** The de-10 status LED becomes a
+  **discrete WS2812B (2020 / Mini)** chip-down part — cheap, one GPIO, positioned
+  wherever the enclosure can actually show it (dev-board WS2812s were often buried).
+  DE-10 already flagged this trade — see its open items.
 
-**LCSC availability (soft preference):** the most LCSC-clean path is actually a **bare
-module** — `ESP32-C3-MINI-1` / `ESP32-C3-WROOM-02` — plus discrete **WS2812B**
-(`C2761795` / `C114586`, or small `WS2812B-2020` / `WS2812B-Mini` for a low-profile
-indicator) and a charge IC (TP4056 / MCP73871), all stocked at LCSC. A finished
-dev-board with everything onboard trades an LCSC-friendly BOM for less hand-design; the
-Olimex C3-DevKit-Lipo is the one surveyed board that is **both** integrated **and** on
-LCSC, though it lacks the onboard WS2812.
-
-**Lean:** treat "onboard WS2812 + onboard charger" as a *nice-to-have* that picks the
-module when a clean one exists (LOLIN C3 Pico / a confirmed FireBeetle 2 C3), but don't
-let it gate the design — the fallback (XIAO C3 for charging + one external WS2812, or a
-bare module + both discretes) is cheap and fully LCSC-sourceable. Decision tracked in
-[`roadmap.md`](roadmap.md).
+The bare-module + chip-down BOM is fully LCSC-sourceable (`ESP32-C3-WROOM-02`,
+`MCP73871`, `LM3410`, `WS2812B-2020` / `-Mini`), which is the same "clean supply
+chain" argument the earlier survey landed on for a bare module anyway.
 
 ---
 
@@ -166,12 +176,19 @@ bare module + both discretes) is cheap and fully LCSC-sourceable. Decision track
   Addressable RGB is too weak per-pixel for the bar and stays the status indicator only.
   Remaining sub-question: final emitter part/bin, optic/diffuser, and exact emitter count
   (which also sets series-vs-parallel string layout against the driver's V<sub>out</sub>).
-- ESP32-C3 **module choice** (§2.1): an integrated "WS2812 + LiPo charger" board vs. a
-  bare module + discrete charger/indicator. Nice-to-have, not a gate.
-- **Mount direction:** keep the adhesive/strap breakaway baseline, or pursue a
-  [magnetic shear-release mount](design/explorations/mounting-magnetic.md)
-  (helmet-interchangeable VHB steel targets, and/or a garment/backpack shoulder mount)?
-  Future-state exploration.
+- ~~ESP32-C3 module choice~~ — **resolved**: bare `ESP32-C3-WROOM-02` + chip-down
+  charger / DC-DC / LED driver / status WS2812 (§2.1). The integrated-module survey
+  is no longer relevant to this form factor.
+- **18650 cell attachment**: pick between **Keystone 1043** (low-profile top-mount
+  holder), **Keystone 54** (end clips only — thinnest), or a **cell with a JST-PH
+  pigtail** (no board footprint). All three preserve the same charger / load-share
+  design; the decision belongs with the enclosure pass because it drives the
+  serviceability story (open-the-case-to-swap vs. slide-in). Assume a protected cell
+  regardless.
+- **Mount direction (fabric case):** magnet size / pole geometry / retention force
+  vs. clean-release for the jacket/backpack magnetic mount — see the
+  [garment / backpack exploration](design/explorations/mounting-magnetic.md#exploration-a--garment--backpack-shoulder-mount).
+  Helmet fitment is deferred (own exploration B in that doc).
 - Whether to add a small inertial sensor purely as a *cross-check / tamper or
   fallen-helmet detector* (NOT for brake detection — that's the patented approach we
   avoid). Deferred.

@@ -3,20 +3,21 @@
 In automotive engineering, the CHMBL is the "Center High-Mounted Brake Light" — this
 repository is an **"Open-sourCe Helmet Mounted Brake Light"** for motorcyclists.
 
-A battery-powered LED bar mounts on the back of the rider's helmet and lights up when
-the motorcycle is braking. The reference bike doesn't publish a brake-switch bit on its
-**CAN bus**, so braking is **inferred from wheel-speed deceleration** read off the bus
-(via the Euro 5 diagnostic port, **listen-only**) and sent wirelessly to the helmet over
-**ESP-NOW**. Clutch and gear/neutral context lets it hold the light through a stop and
-release it sensibly when the bike pulls away — deriving deceleration from the bike's own
-CAN wheel-speed (not an accelerometer) keeps it clear of the inertial-detection patents.
+A battery-powered ~8″ LED bar worn on the rider's back — magnetically clamped to a
+jacket or backpack — lights up when the motorcycle is braking. The reference bike
+doesn't publish a brake-switch bit on its **CAN bus**, so braking is **inferred from
+wheel-speed deceleration** read off the bus (via the Euro 5 diagnostic port,
+**listen-only**) and sent wirelessly to the rider-side unit over **ESP-NOW**. Clutch
+and gear/neutral context lets it hold the light through a stop and release it sensibly
+when the bike pulls away — deriving deceleration from the bike's own CAN wheel-speed
+(not an accelerometer) keeps it clear of the inertial-detection patents.
 
 Two units, both ESP32-based:
 
 - **[`transmitter/`](transmitter)** — bike-side; plugs into the diagnostic port,
   decodes CAN, broadcasts braking state.
-- **[`brake_light/`](brake_light)** — helmet-side; battery-powered LED bar that
-  renders the state.
+- **[`brake_light/`](brake_light)** — rider-side; battery-powered LED bar (fabric
+  mount this rev; helmet fitment deferred) that renders the state.
 
 > ⚠️ Auxiliary device. It does **not** replace the bike's factory brake light, and
 > helmet-mounted lighting is restricted in some places. Read
