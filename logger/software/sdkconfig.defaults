@@ -1,12 +1,39 @@
 # Default sdkconfig values applied on a fresh build (committed; the generated
 # `sdkconfig` is not). Override per-board with `idf.py menuconfig`.
 #
-# Target is the ESP32 on the ESP-WROVER-KIT v4.1. Select it at build time with
-# `idf.py set-target esp32` (or the `target` input of the CI action).
+# Target is the ESP32-S3-WROOM-1-N4 on the custom logger PCB
+# (logger/hardware/logger.kicad_sch). Select it with
+# `idf.py set-target esp32s3` (or the `target` input of the CI action).
+#
+# The retired ESP-WROVER-KIT (`esp32`) is no longer supported: the pin map,
+# console transport and LED set below are all specific to the logger PCB.
 
-# --- PSRAM (the WROVER module carries 4 MB of it; leaves internal RAM headroom
-#     for the CAN frame queue / write buffering) ---
-CONFIG_SPIRAM=y
+# --- Console: the board has no UART bridge (BRINGUP.md §0), so the console has
+#     to ride the S3's native USB-serial-JTAG or there is no log output at all.
+#     Selecting this choice disables the UART console (CONFIG_ESP_CONSOLE_UART_NUM
+#     becomes -1). Proven on hardware through BRINGUP.md §3.5/§4. ---
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# --- Flash: U1 is an ESP32-S3-WROOM-1-N4 (schematic + BOM, LCSC C2913197):
+#     4 MB flash, NO PSRAM. Verified on the bench -- flash_id reports JEDEC
+#     c8/4016 = GigaDevice GD25Q32, 32 Mbit.
+#
+#     Build this at 8 MB by mistake and the app boot-loops before app_main with
+#     "Detected size(4096k) smaller than the size in the binary image header" ->
+#     assert failed at startup_funcs.c:114. Note the bootloader still prints
+#     "SPI Flash Size : 8MB" in that case -- that's the image header being
+#     echoed, not a probe of the fitted part. ---
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# --- Partition table: single app, no OTA, sized against the 4 MB part. The
+#     default "single app" layout caps the factory partition at 1 MB, which is
+#     tight once FATFS + SDMMC + TWAI are linked in; the _LARGE variant gives
+#     ~1.5 MB of headroom. There is no OTA on this board. ---
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# --- NOTE: no CONFIG_SPIRAM here, deliberately. The -N4 module has no PSRAM;
+#     the option must be absent (not merely =n) for this target. The frame
+#     queue and the 32 KB .trc write buffer both fit in internal RAM. ---
 
 # --- FAT filesystem: allow long filenames so the microSD's existing files list
 #     cleanly even though our own logs are short 8.3 names (N.trc) ---

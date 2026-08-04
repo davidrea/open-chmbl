@@ -39,9 +39,12 @@ jobs:
           - name: brake_light
             path: brake_light/software
             target: esp32
+          # The logger runs on its own PCB (ESP32-S3-WROOM-1-N4) and is no
+          # longer portable to the retired ESP-WROVER-KIT: the pin map, the
+          # native-USB console and the three-LED indicator are board-specific.
           - name: logger
             path: logger/software
-            target: esp32
+            target: esp32s3
           - name: transmitter
             path: transmitter/software
             target: esp32c3
