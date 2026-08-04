@@ -9,7 +9,7 @@ See [`../README.md`](../README.md) for the device-level description and
 This board is also the **base design for the [`transmitter/`](../../transmitter)**
 bike-side unit — see [§4](#4-shared-design-with-the-transmitter).
 
-## 1. MCU: ESP32-S3-WROOM-1-N8
+## 1. MCU: ESP32-S3-WROOM-1-N4
 
 **ESP32-S3**, not the ESP32-C3 used elsewhere in this project (`brake_light/`, and
 the transmitter's earlier sketch — see [`docs/hardware.md`](../../docs/hardware.md)).
@@ -19,7 +19,7 @@ throughput a listen-only, no-filtering CAN capture needs. **The ESP32-C3 doesn't
 an SDMMC host peripheral** — only SPI — so it was not an option for this board. The
 C3 stays the right choice for `brake_light/`, which has no SD card.
 
-`-N8` = 8 MB flash, **no PSRAM**. (The retired ESP-WROVER-KIT target had 4 MB of
+`-N4` = 4 MB flash, **no PSRAM**. (The retired ESP-WROVER-KIT target had 4 MB of
 PSRAM the firmware currently depends on — `CONFIG_SPIRAM=y` — see the note in
 [`../software/README.md`](../software/README.md).)
 
@@ -93,7 +93,7 @@ project's bench boards (GPIO8 vs. the SPI-flash bus — see the blink-LED note) 
 known cause of ESP32-S3 boards that won't boot / report flash read errors.
 
 **This is fixed in the current schematic:** the `S` pin is now on **`GPIO35`** (a
-non-strapping GPIO, free on the `-N8` module since it has no PSRAM), and `R16` pulls
+non-strapping GPIO, free on the `-N4` module since it has no PSRAM), and `R16` pulls
 `GPIO35` up — keeping the default-silent failsafe without touching any strap.
 `GPIO45` is left **unconnected**, so its internal pull-down selects the 3.3 V flash
 supply as intended. The two other straps are clean too: `IO0` is the boot button
@@ -109,5 +109,5 @@ Toolkit plugin and are **gitignored**, not committed. Re-export from
 [`logger.kicad_pcb`](logger.kicad_pcb) / [`logger.kicad_sch`](logger.kicad_sch) as
 needed.
 
-Key parts: `U1` ESP32-S3-WROOM-1-N8, `U2` TCAN330, `U4` TPS62172, `U3` USBLC6-2P6,
+Key parts: `U1` ESP32-S3-WROOM-1-N4, `U2` TCAN330, `U4` TPS62172, `U3` USBLC6-2P6,
 `D3` SM24CANB-02HTG, `D4` 20CJQ060.
