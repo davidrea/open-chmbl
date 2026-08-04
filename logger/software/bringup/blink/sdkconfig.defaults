@@ -1,0 +1,16 @@
+# Target is the ESP32-S3-WROOM-1-N4 on the logger PCB.
+# Select with `idf.py set-target esp32s3`.
+
+# The board has no UART bridge (BRINGUP.md §0): the console has to ride the
+# S3's native USB-serial-JTAG or there is no log output at all.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# U1 is an ESP32-S3-WROOM-1-N4 (schematic + BOM, LCSC C2913197): 4 MB flash,
+# no PSRAM. Verified on the bench -- flash_id reports JEDEC c8/4016 = GigaDevice
+# GD25Q32, 32 Mbit.
+#
+# Build this at 8 MB by mistake and the app boot-loops before app_main with
+# "Detected size(4096k) smaller than the size in the binary image header" ->
+# assert failed at startup_funcs.c:114. Note the bootloader still prints
+# "SPI Flash Size : 8MB" in that case -- that's the image header, not a probe.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
