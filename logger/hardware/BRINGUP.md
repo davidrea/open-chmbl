@@ -15,17 +15,24 @@ finish and sign it off before moving to the next. Work USB-powered on the bench 
 > **⚠ This board carries a rework: U3 (USB ESD protection) is removed.** See §2. It is
 > not as-designed, and §10 cannot be signed off until U3 is replaced and §2 re-run.
 
-> **Firmware approach:** the logger app in [`../software/`](../software) still targets
-> the retired ESP-WROVER-KIT (`esp32`) and is **not yet ported** to this board. Rather
-> than throwaway scratch apps, bring-up is done by **porting the logger firmware to
-> `esp32s3` and building I/O-exercise routines into it** — a **bring-up/self-test mode**
-> (Kconfig-gated, entered via a console command or a boot-time button hold) that
-> exercises each peripheral in turn (LEDs, button, CAN silent/loopback, SDMMC, rails
-> readout). The port work — `set-target esp32s3`, the §0 pin map, drop `CONFIG_SPIRAM`,
-> the two-LED status indicator (IO1/IO2, replacing the WROVER-KIT single red die) — is
-> done incrementally as the sections below are cleared, so bring-up validates the real
-> firmware and the diagnostic mode ships with it. Sequence the port to match the
-> section order: rails/boot/flash first, then LEDs+button, CAN, SDMMC, integration.
+> **Firmware approach:** the logger app in [`../software/`](../software) **is now
+> ported** to this board — target `esp32s3`, the §0 pin map, `CONFIG_SPIRAM` dropped,
+> 4 MB flash, native-USB console, and a three-LED indicator (external IO18 + D5/D6)
+> replacing the WROVER-KIT's single red die. Backwards compatibility with the
+> WROVER-KIT was explicitly dropped. It builds clean; **everything below marked `—`
+> is still unverified on hardware.**
+>
+> Two things the port carries that bring-up should lean on: the CAN silent pin (IO35)
+> is parked **high-impedance and read back at boot**, with a loud console warning if
+> it is not high (that is §4.2 answered from the chip side), and *microSD → SDMMC bus
+> width* is Kconfig-selectable 1-bit/4-bit with the negotiated width printed at mount,
+> which is exactly the §6.2 → §6.3 progression.
+>
+> **Still outstanding:** the Kconfig-gated **self-test mode** described in the original
+> plan — a console command or boot-time button hold that walks each peripheral in turn
+> — was **not** built. The §4/§5/§6 steps that name it should be read as "exercise this
+> with the ported firmware", using the boot log and the LEDs, or with a scratch app in
+> [`../software/bringup/`](../software/bringup/).
 
 ---
 
@@ -205,8 +212,10 @@ ESP32-S3 (QFN56) rev v0.2, no PSRAM; flash = 4 MB (matches `-N4`); esptool repor
 > green alone, before alternating — so it also confirms IO1/IO2 are **not swapped**
 > relative to the §0 netlist map, which a simultaneous blink could not distinguish.
 > Done with the scratch app [`../software/bringup/blink/`](../software/bringup/blink/),
-> **not** the self-test mode; still to be folded into the port per the firmware-approach
-> note above.
+> **not** the self-test mode. The IO1/IO2 assignments this step confirmed are now
+> carried in the ported firmware's indicator module (`status_led.[ch]`), which also
+> drives the external LED on IO18 — that third LED is **not** covered by this step and
+> is still §7.2.
 >
 > **4.5 pass:** IO8 reads **high with J5 empty** and **low with a card seated**, and
 > transitions cleanly on insert/remove at runtime. Read with the **internal pull-up
@@ -341,7 +350,8 @@ ESP32-S3 (QFN56) rev v0.2, no PSRAM; flash = 4 MB (matches `-N4`); esptool repor
 - [ ] Button + external/onboard LEDs functional
 - [ ] Reverse-polarity and diode-OR protection verified
 - [ ] ≥30 min live capture, zero drops; thermal soak passed
-- [ ] `esp32s3` firmware port complete (pin map, two-LED status, no PSRAM); self-test mode merged and Kconfig-gated off for production builds
+- [x] `esp32s3` firmware port complete (pin map, three-LED status, no PSRAM, 4 MB, native-USB console) — builds clean; hardware verification is the unchecked boxes above
+- [ ] Self-test mode merged and Kconfig-gated off for production builds — **not built**; see the firmware-approach note at the top
 
 ---
 

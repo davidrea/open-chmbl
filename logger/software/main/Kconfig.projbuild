@@ -1,34 +1,67 @@
+# Pin defaults below are the as-built logger PCB map, taken from the exported
+# KiCad netlist of logger/hardware/logger.kicad_sch and tabulated in
+# logger/hardware/BRINGUP.md §0. Do not take pin numbers from the older
+# logger_sch_revA.pdf or from hardware/README.md — both are stale.
+#
+# Ranges are 0..48 throughout: the ESP32-S3's GPIO range.
+
 menu "CAN logger configuration"
 
     config LOGGER_BUTTON_GPIO
         int "Start/stop pushbutton GPIO number"
-        range 0 39
-        default 33
+        range 0 48
+        default 6
         help
-            GPIO wired to the momentary start/stop pushbutton (other side to GND).
-            The pin is driven with an internal pull-up and the button reads
-            active-low; debouncing is handled by the iot_button component.
+            GPIO wired to the momentary start/stop pushbutton (BTN_SIG, J4 pin3,
+            other side to GND). Active-low: R5 pulls the line up on-board, and
+            pressing the button pulls it to GND.
 
-            Default GPIO33 is free on the ESP-WROVER-KIT v4.1 (the LCD, microSD,
-            PSRAM and console UART occupy the rest) and supports an internal
-            pull-up. GPIO32 is the obvious alternative.
+            The internal pull-up is deliberately left DISABLED in firmware so
+            R5 does the work — an internal pull would read high even if R5 were
+            missing or unstuffed, turning a real board fault into a false pass.
+            This mirrors the card-detect reasoning in BRINGUP.md §4.5.
+
+            Debouncing is handled in software by the espressif/button component.
 
     config LOGGER_CAN_TX_GPIO
         int "CAN (TWAI) TX GPIO number -> transceiver TXD"
-        range 0 33
-        default 26
+        range 0 48
+        default 21
         help
-            GPIO routed to the TWAI transmit signal, wired to the external CAN
-            transceiver's TXD input. GPIO26 is free on the WROVER-KIT. Even in
-            listen-only mode the driver still claims this pin.
+            GPIO routed to the TWAI transmit signal, wired to U2 (TCAN330) pin1
+            TXD; R15 pulls it up to 3V3. Even in listen-only mode the driver
+            still claims this pin.
 
     config LOGGER_CAN_RX_GPIO
         int "CAN (TWAI) RX GPIO number <- transceiver RXD"
-        range 0 39
-        default 27
+        range 0 48
+        default 47
         help
-            GPIO routed to the TWAI receive signal, wired from the external CAN
-            transceiver's RXD output. GPIO27 is free on the WROVER-KIT.
+            GPIO routed to the TWAI receive signal, wired from U2 (TCAN330)
+            pin4 RXD.
+
+    config LOGGER_CAN_SILENT_GPIO
+        int "CAN transceiver silent-mode (S) GPIO number"
+        range 0 48
+        default 35
+        help
+            The TCAN330's S (silent) pin, U2 pin8 — GPIO35, which is U1 pin 28.
+            (Easy to transpose: the schematic pin number is 28, the GPIO is 35.)
+
+            R16 (10K) pulls this net up to 3V3, and S high = silent: the
+            transceiver receives but its driver is disabled, so it cannot put a
+            dominant bit — not even an ACK — on the bus.
+
+            The firmware configures this pin as a HIGH-IMPEDANCE INPUT with both
+            internal pulls disabled and never drives it, so R16 alone holds the
+            transceiver silent. That makes silent mode the power-on default and
+            the failure-safe state: it holds through reset, through boot before
+            app_main runs, and through a firmware crash. This is the hardware
+            half of the project's golden rule (never disturb a live vehicle bus);
+            CONFIG_LOGGER_CAN_LISTEN_ONLY below is the controller half.
+
+            Changing this to an output is a deliberate, bench-only act — see
+            BRINGUP.md §5.5, and only on an isolated bus.
 
     choice LOGGER_CAN_BITRATE
         prompt "CAN bit rate"
@@ -55,7 +88,9 @@ menu "CAN logger configuration"
             When enabled the TWAI controller runs in listen-only mode: it never
             acknowledges or transmits, so it cannot disturb a live vehicle bus
             (the project's golden rule). Disable only for a two-node bench where
-            the single peer needs an ACK to keep transmitting.
+            the single peer needs an ACK to keep transmitting — and note that
+            the transceiver is still held silent by R16 regardless, so this
+            alone will not produce bus traffic.
 
     config LOGGER_RX_QUEUE_LEN
         int "CAN RX-to-writer queue depth (frames)"
@@ -68,29 +103,111 @@ menu "CAN logger configuration"
 
 endmenu
 
-menu "Status LED"
+menu "microSD (SDMMC)"
 
-    config LOGGER_STATUS_LED_GPIO
-        int "Status LED GPIO number"
-        range 0 39
-        default 0
+    config LOGGER_SD_DET_GPIO
+        int "Card-detect (DET_A) GPIO number"
+        range 0 48
+        default 8
         help
-            GPIO driving the WROVER-KIT's onboard red LED die. GPIO0 is the
-            only leg of the board's RGB LED not shared with the microSD bus
-            (green=GPIO2/D0, blue=GPIO4/D1) or the LCD (also removed, for the
-            same reason -- see the top-level README). GPIO0 is also the
-            boot-mode strapping pin, but its strap value is sampled fresh at
-            each reset before any of our code runs, so driving it as a normal
-            output afterward is safe -- this is exactly how Espressif's own
-            board wires this LED (bsp_led_t: BSP_LED_RED = GPIO_NUM_0).
+            J5 pin10, card-detect. Active-LOW: R17 pulls the line up, and a
+            seated card pulls it to GND. Verified on hardware in BRINGUP.md §4.5.
 
-    config LOGGER_STATUS_LED_ACTIVE_LOW
-        bool "LED is active-low"
-        default n
+            As with the button, the internal pull-up is left disabled so R17
+            does the work and a missing R17 shows up as a fault rather than a
+            false "no card" reading.
+
+            SD operations are gated on this signal: the card is not mounted
+            while it reads absent, and a recording will not start without one.
+
+    config LOGGER_SD_CLK_GPIO
+        int "SD CLK GPIO number"
+        range 0 48
+        default 9
         help
-            Off by default (GPIO high = LED on), matching Espressif's own
-            esp_wrover_kit BSP driver (bsp_led_set() writes the level
-            directly, no inversion). Toggle if the LED behaves backwards on
-            your board (lit while idle, dark while recording).
+            J5 pin5, via series R12.
+
+    config LOGGER_SD_CMD_GPIO
+        int "SD CMD GPIO number"
+        range 0 48
+        default 10
+        help
+            J5 pin3; R9 pull-up on-board.
+
+    config LOGGER_SD_D0_GPIO
+        int "SD DAT0 GPIO number"
+        range 0 48
+        default 48
+        help
+            J5 pin7; R10 pull-up on-board.
+
+    config LOGGER_SD_D1_GPIO
+        int "SD DAT1 GPIO number"
+        range 0 48
+        default 17
+        help
+            J5 pin8; R11 pull-up on-board. Unused in 1-bit mode.
+
+    config LOGGER_SD_D2_GPIO
+        int "SD DAT2 GPIO number"
+        range 0 48
+        default 12
+        help
+            J5 pin1; R7 pull-up on-board. Unused in 1-bit mode.
+
+    config LOGGER_SD_D3_GPIO
+        int "SD DAT3 GPIO number"
+        range 0 48
+        default 11
+        help
+            J5 pin2; R8 pull-up on-board. Unused in 1-bit mode (the card still
+            needs it pulled high, which R8 does).
+
+    choice LOGGER_SD_BUS_WIDTH
+        prompt "SDMMC bus width"
+        default LOGGER_SD_BUS_WIDTH_4
+        help
+            4-bit is the intended production mode and the reason this board uses
+            an S3. Select 1-bit to bisect data-line signal-integrity problems:
+            BRINGUP.md §6.2 mounts 1-bit first, then §6.3 moves to 4-bit.
+
+        config LOGGER_SD_BUS_WIDTH_1
+            bool "1-bit (CLK/CMD/DAT0 only)"
+        config LOGGER_SD_BUS_WIDTH_4
+            bool "4-bit"
+    endchoice
+
+endmenu
+
+menu "Status indicators"
+
+    # All three LEDs on this board are active-high: the GPIO sources into the
+    # LED (D5/D6, via R20/R21) or into Q1's gate (external indicator). There is
+    # no active-low option because there is no active-low LED on the board.
+
+    config LOGGER_LED_EXT_GPIO
+        int "External indicator LED GPIO number"
+        range 0 48
+        default 18
+        help
+            Drives Q1 (2N7002K) through R3, low-side switching the remote
+            indicator LED on J4 pin2; R18 holds the gate down. This is the LED
+            in the operator's handlebar pod, alongside the start/stop button.
+            High = LED lit (BRINGUP.md §7.2).
+
+    config LOGGER_LED_GREEN_GPIO
+        int "Onboard green LED (D5) GPIO number"
+        range 0 48
+        default 2
+        help
+            D5, green, via R20. Active-high. Shows CAN bus liveness.
+
+    config LOGGER_LED_RED_GPIO
+        int "Onboard red LED (D6) GPIO number"
+        range 0 48
+        default 1
+        help
+            D6, red, via R21. Active-high. Shows microSD write activity, and
+            doubles as the error indicator.
 
 endmenu
