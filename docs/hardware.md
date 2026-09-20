@@ -44,7 +44,7 @@ peripheral.
 
 | Function | Part | Notes |
 |----------|---------------|-------|
-| MCU + radio | **ESP32-S3-WROOM-1-N8** | Has built-in **TWAI** (CAN 2.0) controller; only a transceiver is needed. Chosen over the C3 on the logger board for its SDMMC peripheral — not needed here, but the transmitter reuses that same board. |
+| MCU + radio | **ESP32-S3-WROOM-1-N4** | 4 MB flash, no PSRAM — build for 4 MB or the app boot-loops (see [`logger/hardware/BRINGUP.md §3`](../logger/hardware/BRINGUP.md)). Has built-in **TWAI** (CAN 2.0) controller; only a transceiver is needed. Chosen over the C3 on the logger board for its SDMMC peripheral — not needed here, but the transmitter reuses that same board. |
 | CAN transceiver | **TCAN330** (3.3 V) | 3.3 V logic, silent-mode pin wired to a GPIO for a hardware-level listen-only default (see the GPIO45 caveat above). |
 | Power regulation | **TPS62172** buck, 12 V→3.3 V (via a diode-ORed +5VD rail shared with USB-C) | Not automotive-load-dump-rated in this rev — a Schottky diode handles reverse-polarity, not a FET. Revisit for full-time bike use; fine for bench/prototype. |
 | Input protection | Schottky diode (reverse-pol.) + dual TVS on CAN-H/CAN-L | See [`logger/hardware/README.md §2`](../logger/hardware/README.md#2-power). |

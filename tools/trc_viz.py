@@ -23,6 +23,12 @@ The acceleration derivation is a faithful Python port of ``accel_update`` in
 ``docs/design/de-09-brake-decel-logic.md``. Every FSM tunable is exposed as a
 live slider so this doubles as a DE-09 calibration bench.
 
+This file is also the **reference implementation** the firmware is tested
+against: :mod:`tools.fsm_check` replays a capture through both this FSM and the
+C one in ``transmitter/software/main/brake_fsm.c`` and asserts they agree at
+every tick, so retuning here without porting the change (or vice versa) fails
+CI rather than going unnoticed.
+
 Usage::
 
     python3 tools/trc_viz.py logger/40mph_drive_cycle.trc
@@ -46,14 +52,14 @@ import cantools
 KMH_TO_MPH = 0.621371
 ACCEL_WINDOW_MS = 200.0     # CAN_DECODE_ACCEL_WINDOW_MS
 ACCEL_ALPHA = 0.3           # CAN_DECODE_ACCEL_ALPHA
-# NOTE: the firmware's CAN_DECODE_SPEED_HIST is 16, but the reference bus emits
-# wheel-speed (0x102) at ~100 Hz (~10 ms apart), so 16 samples span only
-# ~150 ms — less than ACCEL_WINDOW_MS. The "newest sample >= 200 ms old" search
-# then almost never succeeds and the derived acceleration stays frozen (it only
-# updates on rare >200 ms frame gaps). The ring must hold enough samples to
-# actually span the window; 32 (~320 ms at 100 Hz) does, with margin. This is a
-# firmware bug: can_decode.h should size SPEED_HIST to the window x frame rate.
-SPEED_HIST = 32             # cf. CAN_DECODE_SPEED_HIST (16 — too small, see above)
+# The ring has to be deep enough to actually SPAN the slope window at the bus's
+# wheel-speed frame rate. The reference bus emits 0x102 at ~100 Hz (~10 ms
+# apart), so ~20 samples are needed; 32 gives ~320 ms with margin. The firmware
+# shipped 16 for a while, which spans only ~150 ms: the "newest sample >= 200 ms
+# old" search then almost never succeeded and the derived acceleration stayed
+# frozen, so the FSM never saw a decel. Fixed in can_decode.h; the two must stay
+# equal, which tools/fsm_check.py enforces.
+SPEED_HIST = 32             # CAN_DECODE_SPEED_HIST
 STALE_MS = 1000.0           # CAN_DECODE_STALE_MS
 CUTOFF_REASON_VALUE = 0x28
 

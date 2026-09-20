@@ -80,8 +80,9 @@ Realizes [TX-CLI-1…5](feature-functions.md#tx-cli--developer-cli).
 | `sig set throttle <0..100>` | Fake throttle % (diagnostics). | TX-CLI-1 |
 | `sig set rpm <n>` | Fake engine RPM (diagnostics). | TX-CLI-1 |
 | `sig source can\|fake [name]` | Switch a signal (or all) back to live CAN. | TX-CLI-1 |
-| `state show` | Show current state (`OFF`/`BRAKING`/`STOPPED`), emitted `brake_state_t`, derived `accel`, and active timers. | TX-CLI-3 |
-| `state force OFF\|BRAKE\|auto` | Force/release the emitted output state. | TX-CLI-3 |
+| `state show` | Show current state (`OFF`/`BRAKING`/`STOPPED`), emitted `brake_state_t`, the inputs the last tick saw, and active timers. | TX-CLI-3 |
+| `state force off\|brake\|auto` | Force/release the emitted output state. | TX-CLI-3 |
+| `state tune [<name> <value>]` | List or set a [DE-09](design/de-09-brake-decel-logic.md#tunables) tunable, live — the on-target twin of the bench viewer's sliders. | TX-CLI-3 |
 | `can show` | CAN stats: bit rate, frame rate, IDs seen, bus health. | TX-CLI-4 |
 | `can replay <name>` | Feed a stored capture through the decoder (bench). | TX-CLI-1 |
 | `net show` | ESP-NOW peer, seq, TX rate, send success/fail. | TX-CLI-4 |
@@ -116,21 +117,26 @@ Realizes [BL-CLI-1…5](feature-functions.md#bl-cli--developer-cli).
 ## 5. Implementation notes
 
 > **Status:** first cut landed on **both** devices (DE-00 🟡). The REPL is up with
-> `help` and `id` (chip unique ID / base MAC + chip info) on each, plus a stand-in
-> output domain per device: `light [on|off|toggle]` on `brake_light` and
-> `state [off|brake]` on the transmitter. It builds for both `esp32c3` (USB
-> Serial/JTAG console) and `esp32` (UART console). The full source-override
-> registry (generic `... source real|fake` / `... set` / `... show`) is still to
-> come, but its first real consumer — the ESP-NOW link — has landed: `pair
-> start|status|clear` (both devices) and `net show|rate|send|start|stop`
-> (transmitter) and `link show` (brake_light) are implemented per DE-01/DE-03
-> above. `net stop`/`net start` on the transmitter is the intended way to exercise
-> the brake_light's link-loss behavior from the bench.
+> `help` and `id` (chip unique ID / base MAC + chip info) on each, plus
+> `light [on|off|toggle]` on `brake_light`. On the transmitter `state` is no longer a
+> stand-in: it shows, forces and tunes the **real** braking state machine (DE-09 🟢),
+> alongside `sig` and `can` for the decode (DE-08). The full source-override registry
+> (generic `... source real|fake` / `... set` / `... show`) is still to come, but its
+> first real consumer — the ESP-NOW link — has landed: `pair start|status|clear` (both
+> devices), `net show|rate|send|start|stop` (transmitter) and `link show`
+> (brake_light) are implemented per DE-01/DE-03 above. `net stop`/`net start` on the
+> transmitter is the intended way to exercise the brake_light's link-loss behavior
+> from the bench.
+>
+> **Consoles differ by board.** The transmitter now runs on the logger PCB (ESP32-S3,
+> native USB Serial/JTAG — there is no UART bridge); `brake_light` is still the
+> ESP32-C3.
 
-- **Transport:** line-based over the console. On the ESP32-C3 the default is the
-  built-in **USB Serial/JTAG** controller — an enumerated virtual COM port over the
-  native USB pins that carries JTAG debugging on the same cable simultaneously, so
-  no external USB-TTL adapter is needed. UART remains a compile-time fallback. Built
+- **Transport:** line-based over the console. On both the ESP32-C3 and the ESP32-S3
+  the default is the built-in **USB Serial/JTAG** controller — an enumerated virtual
+  COM port over the native USB pins that carries JTAG debugging on the same cable
+  simultaneously, so no external USB-TTL adapter is needed. (On the logger PCB it is
+  not merely the default but the only option: no UART bridge is fitted.) Built
   on ESP-IDF's `esp_console` REPL (tokenizer + command registry); fixed-size buffers.
 - **Source registry:** a central table of overridable signals, each with
   `{ source, fake_value, live_getter }`, so `... set` / `... source` / `... show`

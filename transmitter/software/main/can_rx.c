@@ -7,12 +7,14 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/gpio.h"
 #include "driver/twai.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "sdkconfig.h"
 
 #include "bike_profiles.h"
+#include "status_led.h"
 
 static const char *TAG = "can_rx";
 
@@ -86,6 +88,14 @@ void sig_snapshot(can_signals_t *out, uint32_t *t)
     if (t) {
         *t = t_now;
     }
+}
+
+void can_rx_set_speed_smoothing(uint16_t tau_ms)
+{
+    taskENTER_CRITICAL(&s_lock);
+    can_decode_set_speed_smoothing(&s_decode, tau_ms);
+    can_decode_set_speed_smoothing(&s_fake_accel, tau_ms);
+    taskEXIT_CRITICAL(&s_lock);
 }
 
 static int sig_index(const char *name)
@@ -198,6 +208,8 @@ static void can_rx_task(void *arg)
         if (twai_receive(&msg, portMAX_DELAY) != ESP_OK) {
             continue;
         }
+        status_led_can_activity();
+
         uint32_t t = now_ms();
         taskENTER_CRITICAL(&s_lock);
         s_stats.frames_rx++;
@@ -211,11 +223,53 @@ static void can_rx_task(void *arg)
     }
 }
 
+/* ---- CAN transceiver silent pin ----------------------------------------- */
+
+/* Park the TCAN330's S pin (IO35 — U1 pin 28) high-impedance so R16's pull-up
+ * to 3V3 holds the transceiver in silent mode. We never drive this pin, so
+ * silence is the power-on default and the failure-safe state: it holds through
+ * reset, through boot before app_main runs, and through a firmware crash.
+ *
+ * Both internal pulls are disabled on purpose: an internal pull-up would hold
+ * S high even if R16 were missing or unstuffed, hiding exactly the board fault
+ * that would let us transmit onto a live bus. This is the hardware half of the
+ * golden rule; TWAI_MODE_LISTEN_ONLY below is the controller half, and neither
+ * depends on the other. Same reasoning, and the same code, as the logger
+ * firmware on this board (logger/software/main/logger_main.c). */
+static void can_silent_pin_init(void)
+{
+    const gpio_config_t cfg = {
+        .pin_bit_mask = 1ULL << CONFIG_CHMBL_CAN_SILENT_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    ESP_ERROR_CHECK(gpio_config(&cfg));
+
+    /* Read it back: high means R16 is doing its job. A low reading means the
+     * transceiver is NOT silent and could ACK a live bus — say so loudly. */
+    const int level = gpio_get_level(CONFIG_CHMBL_CAN_SILENT_GPIO);
+    s_stats.silent_ok = (level == 1);
+    if (s_stats.silent_ok) {
+        ESP_LOGI(TAG, "CAN silent pin IO%d = 1 (hi-z, R16 pull-up)",
+                 CONFIG_CHMBL_CAN_SILENT_GPIO);
+    } else {
+        ESP_LOGE(TAG, "CAN silent pin IO%d reads LOW — transceiver may not be "
+                 "silent! Check R16; do NOT connect to a vehicle bus until "
+                 "resolved", CONFIG_CHMBL_CAN_SILENT_GPIO);
+        status_led_fault(true);
+    }
+}
+
 void can_rx_init(void)
 {
     can_decode_init(&s_decode, s_profile);
     can_decode_init(&s_fake_accel, s_profile);
     s_stats.bitrate = s_profile->bitrate;
+
+    /* Before anything that could touch the bus. */
+    can_silent_pin_init();
 
     twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(
         (gpio_num_t)CONFIG_CHMBL_CAN_TX_GPIO,
@@ -246,6 +300,7 @@ void can_rx_init(void)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "TWAI bring-up failed (%s) — CAN decode inactive",
                  esp_err_to_name(err));
+        status_led_fault(true);
         return;
     }
 

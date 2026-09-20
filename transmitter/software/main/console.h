@@ -24,22 +24,13 @@ extern "C" {
  * UART as a fallback), register all commands, and start the shell task. */
 void console_start(void);
 
-/* Hardware/link bring-up — called unconditionally from app_main(), before
- * the CONFIG_CHMBL_CLI-gated console_start(), so the actual link works
- * whether or not the dev CLI is built in. */
-void state_init(void);   /* stand-in state-indicator GPIO (cmd_state.c) */
-
 /* Per-domain command registration (called by console_start). */
 void cmd_system_register(void);   /* `id`    — chip MAC / unique ID + chip info */
-void cmd_state_register(void);    /* `state` — set/show the stand-in braking output state */
+void cmd_state_register(void);    /* `state` — braking state machine: show/force/tune */
 void cmd_pair_register(void);     /* `pair`  — manage the ESP-NOW peer */
 void cmd_net_register(void);      /* `net`   — ESP-NOW heartbeat control/diagnostics */
 void cmd_can_register(void);      /* `can`   — CAN RX diagnostics + bench replay */
 void cmd_sig_register(void);      /* `sig`   — decoded-signal show/fake/ramp/source */
-
-/* Current stand-in braking output state (cmd_state.c); net.c broadcasts this
- * in each heartbeat. */
-brake_state_t state_get(void);
 
 #ifdef __cplusplus
 }

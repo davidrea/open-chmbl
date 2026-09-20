@@ -21,11 +21,30 @@ extern "C" {
  * no frame carrying it arrives for this long. */
 #define CAN_DECODE_STALE_MS 1000u
 
-/* Acceleration derivation: slope of wheel speed over at least this window,
- * then exponentially smoothed (alpha = new-sample weight). */
+/* Acceleration derivation: low-pass the raw wheel speed, take the slope over
+ * at least ACCEL_WINDOW_MS, then exponentially smooth the slope (alpha =
+ * new-sample weight).
+ *
+ * The input low-pass is a dt-aware EMA with this time constant, applied
+ * BEFORE the slope so the signal's ~0.039 mph quantization steps and the odd
+ * single-sample glitch don't inject decel spikes into the derivative. It is
+ * short enough not to delay real braking onset materially, and the FSM's
+ * decel debounce (DE-09) — not more smoothing — is what rejects the rest.
+ * Retunable per decoder instance via can_decode_set_speed_smoothing(). */
 #define CAN_DECODE_ACCEL_WINDOW_MS 200u
 #define CAN_DECODE_ACCEL_ALPHA     0.3f
-#define CAN_DECODE_SPEED_HIST      16u
+#define CAN_DECODE_SPEED_SMOOTH_MS 80u
+
+/* The history ring has to be deep enough to actually SPAN the slope window at
+ * the bus's wheel-speed frame rate, or the "newest sample at least
+ * ACCEL_WINDOW_MS old" search never succeeds and the derived acceleration
+ * stays frozen — the FSM then never sees a decel and the light never comes on.
+ * The reference bus emits 0x102 at ~100 Hz (~10 ms apart), so the window needs
+ * ~20 samples; 32 gives ~320 ms of span, with margin for a faster bus. Sizing
+ * this at 16 was a real defect, found by replaying a ride capture through the
+ * host harness (tools/fsm_check.py), and it is silent: the signal stays valid
+ * and merely stops moving. */
+#define CAN_DECODE_SPEED_HIST      32u
 
 #define KMH_TO_MPH 0.621371f
 
@@ -53,7 +72,13 @@ typedef struct {
     const bike_profile_t *profile;
     can_signals_t sig;
 
-    /* wheel-speed history ring for the accel slope */
+    /* wheel-speed low-pass, ahead of the slope estimate */
+    uint16_t smooth_tau_ms;
+    float    smooth_v;
+    uint32_t smooth_t;
+    bool     smooth_primed;
+
+    /* smoothed wheel-speed history ring for the accel slope */
     float    spd_v[CAN_DECODE_SPEED_HIST];
     uint32_t spd_t[CAN_DECODE_SPEED_HIST];
     uint8_t  spd_head;
@@ -62,6 +87,11 @@ typedef struct {
 } can_decode_t;
 
 void can_decode_init(can_decode_t *d, const bike_profile_t *profile);
+
+/* Retune the wheel-speed low-pass (0 disables it). This is the DE-09
+ * `speed_smooth_ms` tunable; brake_ctl.c pushes it here so the CLI can tune
+ * the whole chain live. Takes effect on the next sample. */
+void can_decode_set_speed_smoothing(can_decode_t *d, uint16_t tau_ms);
 
 /* Feed one received frame. Returns true if any profile signal was updated.
  * now_ms is a monotonic millisecond clock (wraparound-safe). */

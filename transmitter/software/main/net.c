@@ -18,7 +18,7 @@
 
 #include "protocol.h"
 #include "pairing.h"
-#include "console.h"
+#include "brake_ctl.h"
 #include "net.h"
 
 static const char *TAG = "net";

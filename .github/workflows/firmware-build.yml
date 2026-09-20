@@ -45,12 +45,12 @@ jobs:
           - name: logger
             path: logger/software
             target: esp32s3
+          # The transmitter runs on that same logger PCB (docs/hardware.md §1
+          # — no separate transmitter board), so it is likewise esp32s3-only:
+          # pin map, native-USB console and LED set are board-specific.
           - name: transmitter
             path: transmitter/software
-            target: esp32c3
-          - name: transmitter
-            path: transmitter/software
-            target: esp32
+            target: esp32s3
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,11 +62,15 @@ jobs:
           target: ${{ matrix.target }}
           path: ${{ matrix.path }}
 
-  # DE-08 decode correctness: the committed generated profile must match the
-  # DBC, and the C decoder must agree with python-cantools over the reference
-  # ride capture (see docs/design/de-08-can-decode.md).
+  # Host tests for the firmware's pure cores, both replaying the reference ride
+  # capture:
+  #   DE-08 — the committed generated profile must match the DBC, and the C
+  #           decoder must agree with python-cantools (design/de-08-can-decode.md);
+  #   DE-09 — the C braking state machine must agree tick for tick with the
+  #           reference implementation the tunables were calibrated on
+  #           (design/de-09-brake-decel-logic.md).
   can-decode-golden:
-    name: CAN decode golden test (host)
+    name: Decode + FSM host tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -97,5 +101,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release
           cmake --build transmitter/software/test_host/build
 
-      - name: Golden comparison vs cantools
+      - name: DE-08 golden comparison vs cantools
         run: python3 tools/golden_check.py
+
+      - name: DE-09 state-machine parity vs the reference
+        run: python3 tools/fsm_check.py

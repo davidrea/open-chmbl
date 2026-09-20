@@ -1,11 +1,37 @@
 # Default sdkconfig values applied on a fresh build (committed; the generated
 # `sdkconfig` is not). Override per-board with `idf.py menuconfig`.
 #
-# Target-specific values live in sibling sdkconfig.defaults.<target> files that
-# IDF applies automatically on top of this one for the selected target:
-#   - sdkconfig.defaults.esp32c3   product target — USB Serial/JTAG console
-#   - sdkconfig.defaults.esp32     interim dev hardware — UART console
-# Pick the target with `idf.py set-target esp32c3` / `esp32` (or the CI matrix).
+# Target is the ESP32-S3-WROOM-1-N4 on the logger PCB
+# (logger/hardware/logger.kicad_sch), which is also the transmitter's hardware
+# — see docs/hardware.md §1. Select it with `idf.py set-target esp32s3` (or the
+# `target` input of the CI action).
+#
+# The earlier esp32c3 / classic-esp32 dev boards are no longer supported: the
+# pin map, the console transport and the three-LED indicator are all specific
+# to this board, exactly as they are for the logger firmware.
 
-# Smaller, quieter default log level for shipping firmware.
+# --- Console: the board has no UART bridge (BRINGUP.md §0), so the console has
+#     to ride the S3's native USB-serial-JTAG or there is no log output at all.
+#     Selecting this choice disables the UART console (CONFIG_ESP_CONSOLE_UART_NUM
+#     becomes -1). ---
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# --- Flash: U1 is an ESP32-S3-WROOM-1-N4 (schematic + BOM, LCSC C2913197):
+#     4 MB flash, NO PSRAM. Build this at 8 MB by mistake and the app
+#     boot-loops before app_main with "Detected size(4096k) smaller than the
+#     size in the binary image header". Note the bootloader still prints
+#     "SPI Flash Size : 8MB" in that case -- that's the image header being
+#     echoed, not a probe of the fitted part. See logger/hardware/BRINGUP.md §3. ---
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# --- Partition table: single app, no OTA, sized against the 4 MB part. The
+#     default "single app" layout caps the factory partition at 1 MB, which
+#     Wi-Fi/ESP-NOW plus the console overruns; the _LARGE variant gives
+#     ~1.5 MB of headroom. There is no OTA on this board. ---
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# --- NOTE: no CONFIG_SPIRAM here, deliberately. The -N4 module has no PSRAM;
+#     the option must be absent (not merely =n) for this target. ---
+
+# --- Smaller, quieter default log level for shipping firmware ---
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
