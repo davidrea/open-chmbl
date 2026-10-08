@@ -37,6 +37,7 @@ void console_start(void)
     cmd_net_register();
     cmd_can_register();
     cmd_sig_register();
+    cmd_rec_register();
 
 #if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
     esp_console_dev_usb_serial_jtag_config_t hw_config =

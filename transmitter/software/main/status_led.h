@@ -19,6 +19,9 @@
  *   D6 red              IO1, via R21 -- fault lamp:
  *                         fault             2 Hz, 50% duty
  *                         otherwise         dark
+ *                       Ride logging (trc_log.h) has no indicator of its own
+ *                       -- recording is silent -- but a card fault lights
+ *                       this lamp too, through status_led_log_fault().
  *
  * "Heartbeat" is a double thump (lub-dub) on a 2 s period; "inverted" is that
  * same waveform logically negated -- mostly lit, with two short dropouts. The
@@ -48,6 +51,12 @@ void status_led_can_activity(void);
 
 /* Latch or clear the fault lamp (D6). */
 void status_led_fault(bool on);
+
+/* Raise or clear the ride logger's own fault (a card that is present but
+ * won't mount, or a file that can't be opened or written). A separate source
+ * from status_led_fault(), ORed with it on D6, so the logger clearing its
+ * fault can never clear a latched silent-pin or TWAI fault. */
+void status_led_log_fault(bool on);
 
 #ifdef __cplusplus
 }

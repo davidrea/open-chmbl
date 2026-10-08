@@ -9,6 +9,9 @@
  *
  * Bring-up order matters:
  *   status_led   first, so a fault found later has somewhere to show up;
+ *   trc_log      before can_rx, so the frame tap exists before the first
+ *                frame does (it mounts the card from its own task, so boot
+ *                isn't held up; a no-op without CONFIG_CHMBL_TRC_LOG);
  *   can_rx       parks the transceiver's silent pin before anything can
  *                touch the bus, then installs TWAI listen-only;
  *   brake_ctl    starts the 50 Hz DE-09 tick that drives the light;
@@ -26,6 +29,7 @@
 #include "net.h"
 #include "pairing.h"
 #include "status_led.h"
+#include "trc_log.h"
 
 static const char *TAG = "transmitter";
 
@@ -36,6 +40,7 @@ void app_main(void)
     status_led_init();
     pairing_init();
     net_init();
+    trc_log_init();
     can_rx_init();
     brake_ctl_init();
 
