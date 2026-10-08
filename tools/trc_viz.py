@@ -19,9 +19,14 @@ live gauge dashboard (Dear PyGui) that plays back or scrubs the ride:
     * the computed OFF / BRAKING / STOPPED brake-light state
 
 The acceleration derivation is a faithful Python port of ``accel_update`` in
-``transmitter/software/main/can_decode.c`` and the state machine implements
+``components/chmbl_can/can_decode.c`` and the state machine implements
 ``docs/design/de-09-brake-decel-logic.md``. Every FSM tunable is exposed as a
 live slider so this doubles as a DE-09 calibration bench.
+
+This module is also the **reference** the firmware's C state machine
+(``components/brake_fsm``) is checked against: ``tools/fsm_check.py`` replays
+each committed capture through both and asserts they agree. Keep
+``run_fsm``/``derive_accel``/``BrakeTunables`` in step with that component.
 
 Usage::
 
@@ -46,14 +51,17 @@ import cantools
 KMH_TO_MPH = 0.621371
 ACCEL_WINDOW_MS = 200.0     # CAN_DECODE_ACCEL_WINDOW_MS
 ACCEL_ALPHA = 0.3           # CAN_DECODE_ACCEL_ALPHA
-# NOTE: the firmware's CAN_DECODE_SPEED_HIST is 16, but the reference bus emits
-# wheel-speed (0x102) at ~100 Hz (~10 ms apart), so 16 samples span only
-# ~150 ms — less than ACCEL_WINDOW_MS. The "newest sample >= 200 ms old" search
-# then almost never succeeds and the derived acceleration stays frozen (it only
-# updates on rare >200 ms frame gaps). The ring must hold enough samples to
-# actually span the window; 32 (~320 ms at 100 Hz) does, with margin. This is a
-# firmware bug: can_decode.h should size SPEED_HIST to the window x frame rate.
-SPEED_HIST = 32             # cf. CAN_DECODE_SPEED_HIST (16 — too small, see above)
+# The ring must hold enough samples to actually span ACCEL_WINDOW_MS: the
+# reference bus emits wheel speed (0x102) at ~100 Hz (~10 ms apart), so the
+# "newest sample >= 200 ms old" search needs > 20 entries or it fails on nearly
+# every sample and the derived acceleration stays frozen. 32 (~320 ms at 100 Hz)
+# does, with margin.
+#
+# This used to differ from the firmware, which had 16 (~150 ms) and therefore
+# the frozen-accel bug. Fixed — can_decode.h now carries the same 32 and states
+# the sizing rule. Keep the two in step; tools/fsm_check.py will catch it if they
+# drift (see docs/design/de-08-can-decode.md §3b).
+SPEED_HIST = 32             # == CAN_DECODE_SPEED_HIST
 STALE_MS = 1000.0           # CAN_DECODE_STALE_MS
 CUTOFF_REASON_VALUE = 0x28
 
@@ -131,7 +139,11 @@ def _smooth_speed(t_ms: list, v: list, tau_ms: float) -> list:
     """Causal time-constant EMA low-pass on the raw wheel-speed samples, applied
     *before* the slope calc so that quantization steps (~0.039 mph) and the odd
     single-sample glitch don't inject spurious decel spikes. tau_ms<=0 disables
-    it. dt-aware, so it is robust to the variable wheel-speed frame spacing."""
+    it. dt-aware, so it is robust to the variable wheel-speed frame spacing.
+
+    The firmware used to lack this entirely and fed raw samples into the slope.
+    Fixed — ``speed_lpf()`` in ``components/chmbl_can/can_decode.c`` is the same
+    recurrence, with tau from ``CONFIG_BRAKE_FSM_SPEED_SMOOTH_MS``."""
     if tau_ms <= 0.0 or not v:
         return list(v)
     out = [v[0]]

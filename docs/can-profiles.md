@@ -124,7 +124,7 @@ A profile is plain data — adding a bike later is a data change, not new code. 
 **generated** from the bike's DBC by `tools/gen_profile.py` (see §3 step 6 and
 [DE-08 §3a](design/de-08-can-decode.md#3a-architecture-decision--dbc--generated-data-table-hand-written-extractor));
 the struct below is the generator's output shape
-(`transmitter/software/main/bike_profile.h`):
+(`components/chmbl_can/bike_profile.h`):
 
 ```c
 typedef enum {
