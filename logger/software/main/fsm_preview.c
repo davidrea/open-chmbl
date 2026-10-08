@@ -1,6 +1,7 @@
 #include "fsm_preview.h"
 
 #include <stdbool.h>
+#include <stdio.h>
 
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
@@ -121,13 +122,22 @@ static void fsm_preview_task(void *arg)
                         brake_fsm_state_name(s_fsm.state),
                         brake_fsm_rule_name(s_fsm.last_rule),
                         brake_fsm_light_on(&s_fsm) ? "ON" : "off");
+            /* Gear prints as "N" in neutral rather than "0": the rule-6b guard
+             * turns on exactly that distinction, so the log should not make the
+             * reader remember which number neutral is. */
+            char gear_str[8];
+            if (s.in_gear) {
+                snprintf(gear_str, sizeof(gear_str), "%d", (int)s.gear);
+            } else {
+                snprintf(gear_str, sizeof(gear_str), "N");
+            }
             ui_log_line("    speed %.2f mph  accel %s%.2f mph/s  "
-                        "clutch %s  gear %s%d",
+                        "clutch %s  gear %s",
                         s.speed_mph,
                         in.accel_valid ? "" : "(invalid) ",
                         in.accel_valid ? s.accel_mphps : 0.0f,
                         s.clutch_pulled ? "IN" : "out",
-                        s.in_gear ? "" : "N/", (int)s.gear);
+                        gear_str);
         }
 
         led_write(brake_fsm_light_on(&s_fsm));

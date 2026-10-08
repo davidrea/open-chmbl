@@ -605,13 +605,17 @@ static void writer_stop_recording(const char *why)
          * lines starting with ';', and "dropped-frames: N" is greppable. A
          * clean capture records 0, so absence of the line means the file was
          * cut short — by a power loss or a card removal — rather than closed. */
-        char footer[128];
+        char footer[160];
         int fn = snprintf(footer, sizeof(footer),
                           ";dropped-frames: %u (RX-to-writer queue overflow)\n"
                           ";closed: %s\n",
                           (unsigned)s_dropped, why != NULL ? why : "unknown");
         if (fn > 0) {
-            fwrite(footer, 1, (size_t)fn, s_file);
+            /* snprintf returns what it WOULD have written, so clamp before
+             * fwrite or a truncated footer reads past the buffer. */
+            const size_t len = ((size_t)fn < sizeof(footer)) ? (size_t)fn
+                                                             : sizeof(footer) - 1u;
+            fwrite(footer, 1, len, s_file);
         }
         fflush(s_file);
         fclose(s_file);
