@@ -36,8 +36,9 @@ always **viewable** regardless of source. This single mechanism is what makes
 | To test in isolation… | Fake these inputs | View these outputs |
 |------------------------|-------------------|--------------------|
 | ESP-NOW link (DE-01) | TX: `state`; | BL: `link`, `render` |
-| Auto-brightness (DE-02) | BL: `ambient` | BL: `render` (brightness) |
-| Link-loss failsafe (DE-03) | (stop TX heartbeat) | BL: `link`, `render` |
+| LED render (DE-04) | BL: `light on\|off` (bench override) | BL: `render show` |
+| Auto-brightness (DE-02) — ⏸ **deferred** | BL: `ambient` | BL: `render` (brightness) |
+| Link-loss failsafe (DE-03) | (stop TX heartbeat) | BL: `link`, `render`, `ind` |
 | Status indicator (DE-10) | BL: `ind` (force code/color) | BL: `ind show` |
 | CAN decode (DE-08) | TX: replay capture / `can` frames | TX: `sig` (decoded) |
 | Braking state machine (DE-09) | TX: `sig` (wheel/clutch/gear) | TX: `state` (state + accel + timers) |
@@ -103,7 +104,8 @@ Realizes [BL-CLI-1…5](feature-functions.md#bl-cli--developer-cli).
 | `ambient source sensor\|fake` | Switch back to the live sensor. | BL-CLI-2 |
 | `batt show` | Show SoC, voltage, charge state. | BL-CLI-3 |
 | `batt set <pct>` | Fake state-of-charge. | BL-CLI-3 |
-| `render show` | Show effective state, pattern, commanded brightness. | BL-CLI-4 |
+| `render show` | Show effective state, the bar's binary output, anti-strobe floors/hold, override status. | BL-CLI-4 |
+| `light [on\|off\|toggle\|auto]` | Bench override of the bar's binary output; `auto` releases it back to the link-driven state. | BL-CLI-4 |
 | `led test <pattern>` | Drive a fixed pattern (bench LED check). | BL-CLI-4 |
 | `link show` | Link state, last-rx age, timeout, failsafe status. | BL-CLI-5 |
 | `bright cap <0..100>` | Set the user brightness cap. | BL-CLI-5 |
@@ -111,21 +113,37 @@ Realizes [BL-CLI-1…5](feature-functions.md#bl-cli--developer-cli).
 | `ind test <code\|color\|off>` | Force an indicator code/color (preview a blink code). | BL-CLI-6 |
 | `ind source status\|fake` | Switch back to live status aggregation. | BL-CLI-6 |
 
+**⏸ Deferred with [DE-02](design/de-02-auto-brightness.md):** `ambient show|set|source`,
+`bright cap`, and the *commanded brightness* field of `render show`. The bar is a binary
+on/off output and the LED current is fixed in hardware, so there is no brightness to fake
+or read — see the [DE-04 decision](design/de-04-led-render.md). These stay specified here
+for when brightness is picked back up.
+
+**Implemented today** on `brake_light`: `light`, `render show`, `link show`, `ind show`,
+`pair *`, `id`, `help`. `in *`, `batt *` and `led test` are not implemented yet (`light`
+covers the bench-override case `led test` was for).
+
 ---
 
 ## 5. Implementation notes
 
 > **Status:** first cut landed on **both** devices (DE-00 🟡). The REPL is up with
-> `help` and `id` (chip unique ID / base MAC + chip info) on each, plus a stand-in
-> output domain per device: `light [on|off|toggle]` on `brake_light` and
-> `state [off|brake]` on the transmitter. It builds for both `esp32c3` (USB
+> `help` and `id` (chip unique ID / base MAC + chip info) on each, plus an output
+> domain per device: `light [on|off|toggle|auto]` + `render show` on `brake_light`
+> and `state [off|brake]` on the transmitter. It builds for both `esp32c3` (USB
 > Serial/JTAG console) and `esp32` (UART console). The full source-override
 > registry (generic `... source real|fake` / `... set` / `... show`) is still to
 > come, but its first real consumer — the ESP-NOW link — has landed: `pair
 > start|status|clear` (both devices) and `net show|rate|send|start|stop`
-> (transmitter) and `link show` (brake_light) are implemented per DE-01/DE-03
-> above. `net stop`/`net start` on the transmitter is the intended way to exercise
-> the brake_light's link-loss behavior from the bench.
+> (transmitter) and `link show` + `ind show` (brake_light) are implemented per
+> DE-01/DE-03 above. `net stop`/`net start` on the transmitter is the intended way to
+> exercise the brake_light's link-loss behavior from the bench — the bar should go
+> **steady off** and the status LED should blink red; the bar is never blinked.
+>
+> On `brake_light`, `light` is no longer a direct GPIO poke: it publishes a bench
+> **override** into the render stage (DE-04), which is the single writer of the bar's
+> enable pins. So the override still obeys the anti-strobe floor, and it no longer
+> loses a fight with the link watchdog over the pin. `light auto` releases it.
 
 - **Transport:** line-based over the console. On the ESP32-C3 the default is the
   built-in **USB Serial/JTAG** controller — an enumerated virtual COM port over the

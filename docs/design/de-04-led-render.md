@@ -1,29 +1,80 @@
 # DE-04 — LED render & bar driver
 
-**Status:** 🟡 in design · **Device(s):** brake_light · **Depends on:** DE-00
+**Status:** 🟢 render stage implemented as a **binary GPIO output** (brightness deferred)
+· **Device(s):** brake_light · **Depends on:** DE-00
 
-Drives the main red brake bar: turns a braking **state** (`OFF`/`DECEL`/`BRAKE`) and a
-**commanded brightness** (from [DE-02](de-02-auto-brightness.md)) into actual light, via
-a constant-current LED driver. This element owns both the **render logic** (state +
-brightness → a steady pattern and a current setpoint) and the **driver hardware**
-(the boost CC stage that lights the string). It is the "actual LED driving" that
-[DE-02 §1](de-02-auto-brightness.md) defers to.
+Drives the main red brake bar: turns a braking **state** (`OFF`/`DECEL`/`BRAKE`) into
+actual light, via a constant-current LED driver. This element owns both the **render
+logic** (state → a steady output) and the **driver hardware** (the boost CC stage that
+lights the string).
+
+> ## Decision — brightness is deferred; `EN` is a static enable
+>
+> **The render stage is a plain binary GPIO output: high when the brake light should be
+> on, low when it should be off.** Brightness levels are eliminated for now. There is no
+> PWM/LEDC, no duty cycle, no commanded brightness, no user brightness cap, and the
+> ambient-light sensor is not read. The owner's call was to defer the whole
+> brightness/auto-dimming axis and get a working on/off light first.
+>
+> Concretely:
+>
+> - **The driver's `EN`/`CTRL` pin is used as a *static* enable, not a dimming input.**
+>   In the usual design for these parts that pin *is* the brightness control (PWM
+>   dimming) — see §4 below, which this decision supersedes for now. High = the string
+>   lit at its fixed setpoint; low = dark.
+> - **The current setpoint is fixed in hardware by the sense resistor**, not by firmware.
+>   On the first-pass PCB that is **560 mΩ → ≈ 357 mA per string**
+>   ([`brake_light/hardware/README.md`](../../brake_light/hardware/README.md)). The
+>   intensity it *should* be is still governed by the
+>   [LED brightness benchmark](../led-brightness-benchmark.md) — that study is **not**
+>   obsolete; it is now the *only* thing that sets the operating point, so the sense
+>   resistors are the single adjustment. §8 carries the open item to reconcile the two.
+> - **Anti-strobe is retained**, and is now the render stage's main job besides the
+>   state map (§5).
+> - **The topology and component analysis in §3 stands unchanged** — the series-string +
+>   boost-CC conclusion, the emitter down-select and the driver trade study are all
+>   still the design. Only the *render behaviour* changed.
+>
+> What this defers: [DE-02](de-02-auto-brightness.md) (`BL-BRT-*`) in full, `BL-LED-1`'s
+> "at commanded brightness" clause (the bar is driven at *one* brightness), `BL-RND-3`'s
+> dim running light (there is no dim tier, so `OFF` is dark), and the `ambient *` /
+> `bright cap` CLI commands. The `ISL29035` ambient-light sensor stays **populated but
+> unread**, so picking DE-02 back up needs no hardware change.
+>
+> Safety note: deferring *dimming* is not the same as deferring the
+> [no-blinding requirement](../safety-regulatory.md#3-helmet--rider-safety). A bar with a
+> fixed, undimmed setpoint can dazzle following traffic at night — which is exactly why
+> the setpoint must be reconciled against the benchmark (§8) and why DE-02 is deferred,
+> not dropped.
 
 ## 1. Scope & isolation boundary
-- **In:** the state→pattern map, the anti-strobe floor, the brightness→current/duty
-  mapping, and the driver stage that converts a 1S Li-ion cell into a regulated LED current.
-- **Out (faked at edges):** the braking *state* is injected with `in set state` (the
-  real source is the link, DE-01/DE-03); the *commanded brightness* is injected with
-  `ambient set` / `render` (the real source is DE-02); the **status-indicator** LED is a
-  separate path ([DE-10](de-10-status-indicator.md)), not this element.
-- **Isolation test:** brake_light board only; force each state × sweep brightness, watch
-  the bar render correctly (steady, anti-strobe, current within limits) — no radio link
-  or ambient sensor required.
+- **In:** the state→output map, the anti-strobe floor, and the driver stage that converts
+  a 1S Li-ion cell into a regulated LED current.
+- **Out (faked at edges):** the braking *state* is injected with `light on|off` (and in
+  future `in set state`); the real source is the link (DE-01/DE-03). The
+  **status-indicator** LEDs are a separate path ([DE-10](de-10-status-indicator.md)), not
+  this element — and that is now where link-loss indication lives (DE-03).
+  **Brightness is out of scope entirely** (deferred, see the decision above).
+- **Isolation test:** brake_light board only; force each state, watch the bar render
+  correctly (steady, anti-strobe, current within limits) — no radio link or ambient
+  sensor required. The pure half is also proved on the host with no board at all
+  (§5, `brake_light/software/test_host/`).
 
 ## 2. FFL traceability
 BL-RND-1…3 (state→pattern, steady-only/anti-strobe, dim running light) and
 BL-LED-1…2 (drive the bar at commanded brightness via constant current; respect
-thermal/current limits). Viewed through BL-CLI-4.
+thermal/current limits). Viewed through BL-CLI-4 (`render show`).
+
+Current coverage, given the brightness deferral above:
+
+| FFL | Status |
+|-----|--------|
+| BL-RND-1 state→pattern | ✅ implemented, as a binary map (`render_core_map`) |
+| BL-RND-2 steady-only / anti-strobe | ✅ implemented (asymmetric dwell floor, host-tested) |
+| BL-RND-3 dim running light in `OFF` | ⏸ **deferred with brightness** — no dim tier exists, `OFF` is dark |
+| BL-LED-1 drive the bar at commanded brightness | ◐ the bar is driven, at **one** fixed hardware setpoint; "commanded brightness" is deferred to DE-02 |
+| BL-LED-2 thermal / current limits | ◐ relies on the driver's own CC loop, OVP and thermal shutdown; no firmware derate (§8) |
+| BL-CLI-4 view render output | ✅ `render show` (plus `light` as the bench override) |
 
 ## 3. Component selection
 
@@ -177,41 +228,148 @@ Final LED count, current, and optic are tunable — they set R_sense, the string
 and the OVP point, not the part choice (LM3410 covers 3–24 V out / up to 2.8 A across the
 plausible range, given series count ≤ ~8/string).
 
+### 3.5 As built — first-pass PCB
+
+The committed [brake_light schematic/PCB](../../brake_light/hardware/README.md) is a
+first pass and **departs from §3.3/§3.4** in two ways worth recording rather than
+discovering later:
+
+| | §3.3/§3.4 design | First-pass PCB |
+|---|---|---|
+| Driver | TI **LM3410** ×1 (24 V ceiling) | **`AP3019AKTR` ×2** (U3, U6; sheet note "MAX 30V") |
+| Strings | 1 × 8 emitters, ≈ 16.8 V | **2 × 10 emitters** (D3…D12, D15…D24), ≈ 21 V each |
+| R_sense | ≈ 2.4 Ω → ≈ 80 mA/string | **560 mΩ → ≈ 357 mA/string** (≈ 714 mA total) |
+| Inductor | — | 22 µH (L1, L2) |
+
+The two-driver / two-string split is exactly the §3.1 "more than ~8 emitters → two
+parallel series strings" branch, and the AP3019A's higher output ceiling is what makes
+10-per-string viable — so the *shape* of the board follows this element. The **current
+setpoint does not**: it is ~4.5× the §3.4 worked point. That is now the single most
+important number on the board, because with dimming deferred there is no firmware knob to
+pull it back. See §8.
+
+Firmware consequence: **two `EN` nets, two strings, one logical output.** The render stage
+drives both driver enables together, so the bar can never light half-on. Each pin is its
+own Kconfig symbol (`CHMBL_BAR_EN_A_GPIO`, `CHMBL_BAR_EN_B_GPIO`), and a board with only
+one string sets the other to `-1`.
+
+> ⚠️ Both `CTRL` pads are **unconnected in the committed netlist**, so the GPIO numbers
+> in firmware are **provisional defaults pending a schematic review**, not verified
+> assignments. The
+> [hardware README pin map](../../brake_light/hardware/README.md#pin-map) states exactly
+> which pins were verified from the netlist and which were not.
+
 ## 4. I/O assignments & configuration
+
+> **Superseded for now by the decision at the top of this document.** §4.1 is what is
+> implemented; §4.2 is the PWM-dimming design kept on record for when DE-02 is picked
+> back up.
+
+### 4.1 As implemented — binary enable
+
+- **Bar output:** two plain **output GPIOs**, one per driver `CTRL`/`EN` pin, driven
+  together. **High = bar lit, low = bar dark.** Active high. No LEDC, no PWM, no duty
+  cycle.
+- **Current setpoint:** fixed by each driver's sense resistor (§3.5). Firmware does not
+  and cannot change it.
+- **Pin numbers:** Kconfig (`CHMBL_BAR_EN_A_GPIO`, `CHMBL_BAR_EN_B_GPIO`), `-1` = string
+  not fitted, so the classic-ESP32 bench board runs with a single stand-in LED.
+- **Thermal (BL-LED-2):** the driver's own CC loop, OVP and thermal shutdown are the
+  whole story for now — there is no firmware derate and no NTC on the bar (§8).
+
+### 4.2 Deferred — PWM/analog dimming (for DE-02)
+
 - **PWM dimming:** one ESP32-C3 LEDC GPIO → driver **DIM/EN** pin. Keep the PWM
   **above flicker fusion (~200 Hz–1 kHz)** — this is *brightness* dimming, distinct from
   the illegal *flashing* (pattern-level, handled by BL-RND-2's anti-strobe floor).
 - **Analog current trim (optional, for deep night-dim):** filtered PWM or DAC into the
   FB/ISET node to lower absolute LED current below what PWM alone gives cleanly.
-- **Enable/shutdown:** driver EN for true off (OFF state / power-save).
-- **Thermal (BL-LED-2):** rely on the driver's thermal shutdown as the floor; optionally
-  an NTC near the bar for a firmware-side derate. Set R_sense for the worst-case (3.0 V,
-  full brake) current and let OVP cover an open-LED string.
+- Both land on the *same* pins as §4.1 — the binary enable is a strict subset of the PWM
+  design (100 % / 0 % duty), so nothing has to be rewired to pick this up.
 
 ## 5. Firmware module/task decomposition
-- **Render task:** `(state, commanded_brightness) → (pattern, current/duty setpoint)`.
-  Steady patterns only; enforce the anti-strobe minimum-dwell floor (BL-RND-2); optional
-  dim running light in `OFF` (BL-RND-3). Drives LEDC (and the analog trim, if used).
-- **Pure / host-testable:** the state×brightness→setpoint map and the anti-strobe
-  rate-limiter — no hardware needed.
-- **Platform:** LEDC PWM config, optional DAC/filtered-PWM, EN control.
+
+Implemented in `brake_light/software/main/`:
+
+- **Pure / host-testable core** (`render_core.[ch]`): the **state→binary-output map**
+  (`ST_BRAKE` → on, `ST_OFF` → off, `ST_DECEL` → on, anything off-protocol → off) and the
+  **anti-strobe dwell floor**. No ESP-IDF, no GPIO, caller-supplied clock. Proved in
+  `brake_light/software/test_host/render_core_test.c`, which CI runs.
+- **Platform half** (`render.[ch]`): configures the two enable GPIOs, runs the render task
+  at `CHMBL_RENDER_TICK_MS` (16 ms ≈ 60 Hz), and is the **single writer** of those pins —
+  both the link watchdog and the `light` bench override publish *into* it rather than
+  poking GPIOs.
+
+**`ST_DECEL` is mapped to ON, deliberately.** It is reserved in the
+[protocol](../protocol.md#2-message-format) and not emitted by the TX FSM, but leaving it
+undefined in the render map would be worse than choosing: with brightness deferred there
+is no middle tier to render it as, and the fail-safe reading of "the bike is slowing" is a
+lit brake light, not a dark one.
+
+**Anti-strobe (BL-RND-2), asymmetric on purpose:**
+
+| Floor | Default | Why |
+|-------|---------|-----|
+| `CHMBL_RENDER_MIN_ON_MS` | 600 ms | Once lit the bar stays lit at least this long. This is the floor that actually stops a strobe, and it is safe to be generous — holding a brake light on slightly too long is honest. |
+| `CHMBL_RENDER_MIN_OFF_MS` | 150 ms | Once dark it stays dark at least this long before relighting. Kept small: this is the only floor that can delay a *brake-on* edge against the ≤ 100 ms end-to-end budget, and it only bites if the bar went dark moments ago. |
+
+A change arriving inside a floor is **deferred, not dropped**; the render task commits it
+when the floor elapses, unless the state has gone back by then. Worst case — an upstream
+state flapping every single tick — the bar is bounded to one on→off→on cycle per 750 ms.
+The primary anti-oscillation guards remain upstream (the TX FSM's low-speed hysteresis,
+120 ms decel debounce and 150 ms dwell,
+[`firmware.md`](../firmware.md#braking-state-machine)) and in `link.c`, which holds the
+bar **steady** rather than blinking it. This floor is defence in depth inside the render
+stage.
 
 ## 6. CLI hooks
-- `in set state OFF|DECEL|BRAKE` — fake the braking state.
-- `ambient set <lux>` / `render` — drive/observe commanded brightness (shared with DE-02).
-- `render show` — view state + commanded brightness + pattern + resulting LED-current
-  setpoint (BL-CLI-4).
-- `bright cap` — user brightness cap interaction.
+- `light on|off|toggle|auto` — the bench override of the bar's binary output; `auto`
+  releases it back to the link-driven state. It goes through the render stage (so the
+  anti-strobe floor still applies) rather than poking the GPIOs.
+- `render show` — view the effective state, the binary output now on the enable pins, the
+  anti-strobe floors and any hold in progress, and the override status (BL-CLI-4).
+- `in set state OFF|DECEL|BRAKE` — fake the braking state **(not implemented yet;** today
+  `light` covers the bench case, and `net stop` on the transmitter covers the link case).
+- `ambient set <lux>` / `bright cap` — **deferred** with DE-02; there is no brightness to
+  observe.
 
 ## 7. Isolation acceptance
-- Each forced state renders its correct **steady** pattern; `BRAKE` brightest, `OFF`
-  dark or dim-running per config.
-- Sweeping commanded brightness moves the LED current setpoint monotonically; the
-  anti-strobe floor prevents any flashing on fast transitions.
-- Current setpoint stays within the configured limit across 3.0–4.2 V supply; OVP
-  behaves on an open-LED string; driver thermal limit holds.
+- Each forced state renders its correct **steady** output: `BRAKE` (and the reserved
+  `DECEL`) lit, `OFF` dark. ✅ host-tested; on-hardware check pending a built board.
+- No input sequence can flash the bar: a state flapping at the render rate is bounded by
+  the dwell floors, and a transient inside a floor never reaches the pin.
+  ✅ host-tested.
+- Link-lost / waiting leaves the bar **steady off** (never blinking, never a latched
+  `BRAKE`), with the indication on the status LEDs instead
+  ([DE-03](de-03-link-loss-failsafe.md), [DE-10](de-10-status-indicator.md)).
+- **Still to demonstrate on hardware:** string current within limits across a 3.0–4.2 V
+  supply, OVP behaviour on an open-LED string, driver thermal limit, and the
+  measured on-axis intensity against the
+  [benchmark](../led-brightness-benchmark.md) band. None of this is possible until a board
+  is built — and the measured intensity is the gate on §8's first open item.
 
 ## 8. Open items
+
+**From the brightness deferral (new):**
+- **Reconcile the fixed setpoint with the benchmark.** The first-pass board sits at
+  ≈ 357 mA × 2 strings of 10 (§3.5) against §3.4's ≈ 80 mA × 1 string of 8. With no
+  firmware dimming, the sense resistors are the *only* adjustment, so this has to be
+  settled against the [benchmark](../led-brightness-benchmark.md)'s ≈ 50–80 cd daylight
+  band before a board is populated. The benchmark is **not** superseded by this
+  deferral — it is now the sole thing setting the operating point.
+- **Night glare.** A single undimmed setpoint cannot satisfy both the daylight target and
+  the ≈ 5–15 cd night floor. Until DE-02 lands, pick the setpoint knowing which end is
+  being compromised and say so in the build docs
+  ([`safety-regulatory.md §3`](../safety-regulatory.md#3-helmet--rider-safety)).
+- **Confirm `AP3019A` against the §3.3 criteria** (V<sub>in</sub>-min vs. the 1S cutoff,
+  switch-current limit, EMI next to the 2.4 GHz radio) and record the outcome, since the
+  board substituted it for the LM3410 down-select.
+- **Validate the dwell-floor defaults on hardware** (600/150 ms). The host test proves the
+  bound; whether 600 ms of extra on-time feels right on a real ride is a Phase-3 question.
+- **Picking brightness back up** means DE-02 plus swapping §4.1 for §4.2 — same pins, so
+  no board change. The `ISL29035` is already fitted.
+
+**Pre-existing:**
 - Final **LED count / current / optic** (from the [benchmark](../led-brightness-benchmark.md)'s
   remaining open items) → sets R_sense, the **series/parallel string layout** (§3.1), and
   the OVP threshold.

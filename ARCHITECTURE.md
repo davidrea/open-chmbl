@@ -56,8 +56,8 @@ above. See [§4](#4-braking-state-machine) for the resulting state machine.
  │     ▼                      │   ESP-NOW    │  │ ESP32-C3            │  │
  │  ┌───────────────────┐     │  (2.4 GHz,   │  │  • RX callback      │  │
  │  │ TX unit            │    ))) encrypted, │  │  • state interpret  │  │
- │  │  • CAN transceiver │     │   pre-paired)│  │  • LED pattern eng. │  │
- │  │  • ESP32-S3 (TWAI  │ ─ ─ ─ ─ ─ ─ ─ ─►  │  │  • ambient dimming  │  │
+ │  │  • CAN transceiver │     │   pre-paired)│  │  • bar render (on/  │  │
+ │  │  • ESP32-S3 (TWAI  │ ─ ─ ─ ─ ─ ─ ─ ─►  │  │    off, anti-strobe)│  │
  │  │    listen-only)    │     │              │  │  • battery monitor  │  │
  │  │  • bike-profile    │     │              │  └─────────┬───────────┘  │
  │  │    decoder         │     │              │            ▼              │
@@ -73,7 +73,7 @@ Two independent units:
 | Unit | Lives on | Power | Job |
 |------|----------|-------|-----|
 | **`transmitter/`** (bike-side, "TX") | Plugs into the diagnostic port | Bike 12 V (switched) | Sniff CAN, decode brake/RPM/throttle/clutch, run the braking state machine, broadcast state over ESP-NOW |
-| **`brake_light/`** (rider-side, "RX") | Magnetically clamped to the jacket / backpack (helmet fitment deferred) | On-board 1S 18650 Li-ion, USB-C charge | Receive state, drive the ~8″ LED bar with the right pattern/brightness, manage battery & link health |
+| **`brake_light/`** (rider-side, "RX") | Magnetically clamped to the jacket / backpack (helmet fitment deferred) | On-board 1S 18650 Li-ion, USB-C charge | Receive state, drive the ~8″ LED bar on/off (steadily), manage battery & link health |
 
 > Throughout these docs "TX" = the `transmitter` unit and "RX" = the `brake_light` unit.
 
@@ -83,9 +83,9 @@ Two independent units:
 > [`docs/hardware.md §1`](docs/hardware.md#1-transmitter-bike-side).
 
 The TX does all interpretation. The RX is intentionally "dumb": it renders whatever
-discrete state the TX tells it to, plus a couple of local concerns (brightness vs.
-ambient light, battery, link-loss fault). Keeping the logic on one side makes the
-protocol small and the failure modes easy to reason about.
+discrete state the TX tells it to, plus a couple of local concerns (battery, link-loss
+fault — and brightness vs. ambient light once DE-02 is un-deferred). Keeping the logic on
+one side makes the protocol small and the failure modes easy to reason about.
 
 ---
 
@@ -140,9 +140,16 @@ their *off* conditions differ):
 
 | State | Condition (sketch) | Meaning | Render |
 |-------|--------------------|---------|--------|
-| `OFF` | Accelerating, steady cruise, or armed-but-idle | Not braking | Light off (or dim running light) |
-| `BRAKING` | Deceleration exceeds a threshold while moving | Bike is slowing | **Bright, solid red** |
-| `STOPPED` | At/near a standstill (held on) | Bike has stopped | **Bright, solid red** |
+| `OFF` | Accelerating, steady cruise, or armed-but-idle | Not braking | Light off |
+| `BRAKING` | Deceleration exceeds a threshold while moving | Bike is slowing | **Solid red, on** |
+| `STOPPED` | At/near a standstill (held on) | Bike has stopped | **Solid red, on** |
+
+> **Render is currently literally binary.** The RX drives the bar as a plain GPIO — high
+> when the light should be on, low when off. Brightness levels, PWM dimming and the
+> dim running light are **deferred**: decision in
+> [`docs/design/de-04-led-render.md`](docs/design/de-04-led-render.md), deferred element
+> [DE-02](docs/design/de-02-auto-brightness.md). The ambient-light sensor is on the
+> brake_light board but unread.
 
 `BRAKING` and `STOPPED` are both sent to the helmet as `BRAKE` (light on). The protocol
 keeps a `DECEL` value **reserved** for a possible future soft-cue tier.
@@ -178,9 +185,12 @@ rationale and the SMC model are in
 - **Heartbeat model.** The TX transmits state at a fixed rate (target **20–50 Hz**)
   whether or not state changed. The RX treats *absence* of packets as a fault.
 - **Link-loss failsafe.** If the RX hasn't heard a valid packet within a timeout
-  (target **≤ 300 ms**), it enters a **distinct "link-lost" indication** — a steady
-  running light plus a slow fault blink. It must **not** assume "no packet = not
-  braking" (silently going dark) and must **not** latch a stale `BRAKE` on forever.
+  (target **≤ 300 ms**), it enters a **distinct "link-lost" indication**. It must **not**
+  assume "no packet = not braking" *silently* and must **not** latch a stale `BRAKE` on
+  forever. With a binary bar the indication lives on the **separate status LED** (plus
+  `link show` on the console) while the bar is held **steady off** — blinking the brake
+  bar is both unsafe and illegal. See
+  [`docs/design/de-03-link-loss-failsafe.md`](docs/design/de-03-link-loss-failsafe.md).
 - **End-to-end latency budget:** brake event → LED ≤ **100 ms** (CAN read + state
   machine + ESP-NOW hop + LED update). ESP-NOW itself is single-digit ms.
 - **Message integrity:** sequence number for replay/staleness detection; ESP-NOW's

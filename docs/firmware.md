@@ -160,51 +160,69 @@ typedef struct {
 
 ## 2. Brake_light firmware (rider-side)
 
-Responsibilities: receive state, render LEDs, dim for ambient light, monitor
-battery, manage pairing and link-loss.
+Responsibilities: receive state, render the bar as a binary on/off output, monitor
+battery, manage pairing and link-loss. (Ambient dimming is
+[deferred](design/de-02-auto-brightness.md) — see the render mapping below.)
 
 ### Tasks / loop
 
 | Task | Rate | Job |
 |------|------|-----|
 | **ESP-NOW RX** | event | Validate seq/encryption; update `last_state` + `last_rx_time`. |
-| **State render** | 60 Hz | Map state → LED pattern/brightness via the pattern engine. |
-| **Ambient dim** | 5 Hz | Read light sensor → scale brightness (night vs. day). |
-| **Link watchdog** | 10 Hz | If `now - last_rx_time > LINK_TIMEOUT_MS` → link-lost indication. |
+| **State render** | 60 Hz | Map state → the bar's **binary on/off** output; enforce the anti-strobe dwell floor. |
+| **Ambient dim** | — | **Deferred** with [DE-02](design/de-02-auto-brightness.md): no brightness in the output path, so no ambient task. The `ISL29035` is fitted but unread. |
+| **Link watchdog** | 10 Hz | If `now - last_rx_time > LINK_TIMEOUT_MS` → hold the bar steady off and put the link-lost indication on the **status LED**. |
 | **Battery** | 1 Hz | Fuel gauge → low-battery pattern + cutoff. |
 | **UI / pairing** | event | Button: power, enter pairing, cycle brightness cap. |
 | **Status indicator** | 10–20 Hz | Aggregate device status → drive the separate indicator LED (color/blink code); independent of the main bar. |
 
-### Pattern engine (suggested mapping)
+### Render mapping (binary bar)
 
-| State | Pattern |
-|-------|---------|
-| `OFF` | Off, or a dim steady running light (config). |
-| `DECEL` | **Reserved** (not emitted by the current TX FSM). If ever used: medium-brightness steady red, **no flashing**. |
-| `BRAKE` | Full-brightness steady red. Emitted whenever the TX is in `BRAKING` or `STOPPED`. |
-| **link-lost** | Steady running light **+ slow fault blink** (distinct from braking). |
-| low-battery | Brief periodic amber/dim blink of the **status-indicator LED**, not the main bar. |
+The bar is a **plain binary GPIO output** — high when the brake light should be on, low
+when it should be off. Brightness/PWM dimming is **deferred**; the LED current is fixed in
+hardware by the driver's sense resistor. Decision and rationale:
+[DE-04](design/de-04-led-render.md).
 
-All transitions are rate-limited so the main bar can't strobe.
+| State | Bar output |
+|-------|-----------|
+| `OFF` | **Low** (dark). There is no dim running light — that needs a brightness tier (deferred). |
+| `DECEL` | **High** (lit). **Reserved**, not emitted by the current TX FSM; mapped to on rather than left undefined, since with no middle tier the fail-safe reading of "slowing" is a lit light. |
+| `BRAKE` | **High** (lit), steady. Emitted whenever the TX is in `BRAKING` or `STOPPED`. |
+| **link-lost / waiting** | **Low, steady** — the bar is *never* blinked. The distinct indication goes to the **status-indicator LED**; see [DE-03 §4.1](design/de-03-link-loss-failsafe.md). |
+| low-battery | Brief periodic blink of the **status-indicator LED**, not the main bar. |
+
+All transitions are rate-limited so the main bar can't strobe: once lit it stays lit for
+at least `RENDER_MIN_ON_MS` (600 ms), and once dark it stays dark for at least
+`RENDER_MIN_OFF_MS` (150 ms) before relighting — asymmetric so a brake-on edge from a
+settled-dark bar is immediate.
 `LINK_TIMEOUT_MS` target: **≤ 300 ms**.
 
 ### Status-indicator LED (separate from the bar)
 
-A small **addressable RGB LED**, independent of the main array, carries discrete
-status and fault reporting by **color and/or blink code** — readable even when the bar
-is off, dimmed, or itself faulted. It can be the chosen module's **onboard WS2812** (see
-[`hardware.md §2.1`](hardware.md#21-integrated-module-candidates-ws2812--lipo-charger)).
-Design element [DE-10](design/de-10-status-indicator.md); capabilities BL-IND-*.
+A small indicator, independent of the main array, carries discrete status and fault
+reporting by **color and/or blink code** — readable even when the bar is off or itself
+faulted. Design element [DE-10](design/de-10-status-indicator.md); capabilities BL-IND-*.
 
-A starting code table (resolve by priority, highest first):
+On the first-pass brake_light PCB this is **two discrete mono LEDs, D13 (RED) and D14
+(GRN)**, each active-high through a 100 Ω resistor — not the addressable RGB originally
+sketched. **Only link health is wired up so far**, which is where DE-03's link-lost
+indication now lives (it used to blink the brake bar):
+
+| Link status | Indicator (implemented) |
+|-------------|-------------------------|
+| link up | GRN steady |
+| waiting (booted, no packet yet) | GRN slow blink |
+| **link-lost** | **RED slow blink** |
+
+The rest of the code table is still a target, not code (resolve by priority, highest
+first):
 
 | Status | Suggested indicator |
 |--------|---------------------|
 | fault / error | Red — **blink code** encodes the fault class (count the blinks). |
-| pairing | Blue, slow pulse. |
-| link-lost | Amber, slow blink (mirrors the bar's fault blink). |
-| charging | Steady amber; **green** when full. |
-| low battery | Red, brief periodic blink. |
+| pairing | Blue, slow pulse. *(no blue on this board — needs re-coding)* |
+| charging | Steady amber; **green** when full. *(the charger's `~CHG` isn't routed to the MCU on this revision)* |
+| low battery | Red, brief periodic blink. *(no battery-sense net on this revision)* |
 | OK / idle | Off, or a dim "armed" tick (night-dimmed). |
 
 Lean on **blink patterns**, not color alone, for the safety-relevant distinctions
@@ -213,10 +231,12 @@ with the braking signal.
 
 ### Failsafe philosophy
 
-- Lost link ⇒ **honest "I don't know" indication**, never a silent dark light and
-  never a latched fake `BRAKE`.
+- Lost link ⇒ **honest "I don't know" indication**, never a silently dark light and
+  never a latched fake `BRAKE`. With a binary bar the indication is carried by the
+  **status LED plus `link show`**, while the bar is held steady off — the bar is never
+  blinked. Reasoning: [DE-03 §4.1](design/de-03-link-loss-failsafe.md).
 - Stale packet (old sequence number) is dropped.
-- On boot before first packet: running light + waiting indication.
+- On boot before first packet: bar off, "waiting" indication on the status LED.
 
 ---
 

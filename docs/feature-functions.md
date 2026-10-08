@@ -89,25 +89,48 @@ brake_light (rider-side).
 - BL-NET-5 — Optionally send low-rate telemetry to the transmitter.
 
 ### BL-RND — State rendering
-- BL-RND-1 — Map `OFF` / `DECEL` / `BRAKE` to LED patterns.
+- BL-RND-1 — Map `OFF` / `DECEL` / `BRAKE` to LED patterns. *(Implemented as a binary
+  on/off map — see the brightness-deferral note below.)*
 - BL-RND-2 — Render **steady** patterns only; enforce an anti-strobe floor.
-- BL-RND-3 — Optional dim running light in `OFF`.
+- BL-RND-3 — Optional dim running light in `OFF`. **⏸ Deferred** — needs a brightness
+  tier, so `OFF` is currently dark.
 
 ### BL-BRT — Auto brightness
-- BL-BRT-1 — Sense ambient light.
-- BL-BRT-2 — Scale brightness for day vs. night (no blinding at night, visible by day).
-- BL-BRT-3 — Apply a user-selectable brightness cap.
-- BL-BRT-4 — Smooth brightness changes (no flicker on light transients).
+
+> **⏸ Deferred as a group — not withdrawn.** The owner's call was to get a working on/off
+> brake light first, so the bar is driven as a **binary GPIO output** with the LED current
+> fixed in hardware by the driver's sense resistor. Decision and rationale:
+> [`design/de-04-led-render.md`](design/de-04-led-render.md); the deferred element is
+> [DE-02](design/de-02-auto-brightness.md). The `ISL29035` ambient sensor is already
+> fitted on the brake_light PCB and left unread, so these come back as a firmware-only
+> change. **BL-BRT-2 remains a safety requirement**
+> ([no blinding](safety-regulatory.md#3-helmet--rider-safety)) — deferring the mechanism
+> does not retire it; until it lands, the fixed setpoint has to be chosen knowing which
+> end (day visibility vs. night glare) is compromised.
+
+- BL-BRT-1 — Sense ambient light. ⏸ deferred
+- BL-BRT-2 — Scale brightness for day vs. night (no blinding at night, visible by day). ⏸ deferred
+- BL-BRT-3 — Apply a user-selectable brightness cap. ⏸ deferred
+- BL-BRT-4 — Smooth brightness changes (no flicker on light transients). ⏸ deferred
 
 ### BL-FS — Link health & failsafe
 - BL-FS-1 — Declare link-loss when no valid packet arrives within the timeout (≤ 300 ms).
-- BL-FS-2 — Show a **distinct** link-lost indication (running light + slow fault blink).
-- BL-FS-3 — Never go silently dark and never latch a fake `BRAKE` on link-loss.
-- BL-FS-4 — Show a pre-first-packet "waiting" indication at boot.
+- BL-FS-2 — Show a **distinct** link-lost indication. *Satisfied on the
+  **status-indicator LED** (BL-IND), not the bar: the bar is binary and blinking a stop
+  lamp is forbidden, so it is held steady off while the status LED carries the
+  indication. See [DE-03 §4.1](design/de-03-link-loss-failsafe.md).*
+- BL-FS-3 — Never go silently dark and never latch a fake `BRAKE` on link-loss. *The
+  operative word is **silently**: the status LED and `link show` both report the loss,
+  and a stale `BRAKE` is released within the timeout rather than latched.*
+- BL-FS-4 — Show a pre-first-packet "waiting" indication at boot. *Also on the status
+  LED.*
 
 ### BL-LED — LED driver
 - BL-LED-1 — Drive the LED bar at commanded brightness (PWM/constant-current).
-- BL-LED-2 — Respect thermal / current limits.
+  *Currently: driven at **one** fixed constant-current setpoint set by the driver's sense
+  resistor; the "commanded brightness" clause is ⏸ deferred with BL-BRT.*
+- BL-LED-2 — Respect thermal / current limits. *Currently relies on the driver's own CC
+  loop, OVP and thermal shutdown; no firmware derate.*
 
 ### BL-IND — Status indicator LED
 A **small dedicated indicator**, separate from the main brake-light array, for
@@ -125,18 +148,22 @@ discrete status and fault reporting. Maps cleanly onto a single addressable RGB 
   rider, without losing fault legibility on demand.
 
 ### BL-UI — User interface
-- BL-UI-1 — Button: power, enter pairing, cycle brightness cap.
+- BL-UI-1 — Button: power, enter pairing, cycle brightness cap. *(The brightness-cap
+  cycle is ⏸ deferred with BL-BRT-3.)*
 - BL-UI-2 — Surface link / pairing / battery / fault state to the rider via the
   [status-indicator LED](#bl-ind--status-indicator-led) (BL-IND).
 
 ### BL-CFG — Configuration & persistence
-- BL-CFG-1 — Persist peer/keys, brightness cap, and running-light option (NVS).
+- BL-CFG-1 — Persist peer/keys, brightness cap, and running-light option (NVS). *(The
+  brightness cap and running-light option are ⏸ deferred with BL-BRT / BL-RND-3, so there
+  is nothing to persist for them yet.)*
 
 ### BL-CLI — Developer CLI
 - BL-CLI-1 — Fake the incoming braking state (in lieu of a live link) — see [cli.md](cli.md).
-- BL-CLI-2 — Fake the ambient-light reading.
+- BL-CLI-2 — Fake the ambient-light reading. ⏸ deferred with BL-BRT
 - BL-CLI-3 — Fake battery state-of-charge.
-- BL-CLI-4 — View render output (state + commanded brightness + pattern).
+- BL-CLI-4 — View render output (state + commanded brightness + pattern). *`render show`;
+  the brightness field is ⏸ deferred with BL-BRT.*
 - BL-CLI-5 — View link / battery / failsafe status; trigger pairing; get/set config.
 - BL-CLI-6 — Drive/preview the status-indicator LED (force a code/color) and view its current state.
 

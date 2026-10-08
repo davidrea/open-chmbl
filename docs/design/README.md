@@ -53,21 +53,29 @@ Every `de-*.md` follows this structure:
 
 Ordered by dependency and the agreed sequence (CLI first so everything else is
 testable in isolation; CAN-dependent elements last, after captures exist). Status:
-🔲 not started · 🟡 in design · 🟢 implemented.
+🔲 not started · 🟡 in design / partial · 🟢 implemented · ⏸ deferred.
 
 | ID | Element | Device(s) | Realizes (FFL) | Depends on | Status |
 |----|---------|-----------|----------------|-----------|--------|
 | **DE-00** | [CLI / shell framework](../cli.md) | both | TX-CLI-*, BL-CLI-* | — | 🟡 |
 | **DE-01** | [ESP-NOW link](de-01-espnow-link.md) | both | TX-NET-*, BL-NET-* | DE-00 | 🟢 |
-| **DE-02** | [Auto-brightness](de-02-auto-brightness.md) | brake_light | BL-BRT-* | DE-00 | 🔲 |
-| **DE-03** | [Link-loss failsafe](de-03-link-loss-failsafe.md) | brake_light | BL-FS-* | DE-00, DE-01 | 🟡 |
-| **DE-04** | [LED render & bar driver](de-04-led-render.md) | brake_light | BL-RND-*, BL-LED-* | DE-00 | 🟡 |
+| **DE-02** | [Auto-brightness](de-02-auto-brightness.md) | brake_light | BL-BRT-* | DE-00 | ⏸ deferred ([why](de-04-led-render.md)) |
+| **DE-03** | [Link-loss failsafe](de-03-link-loss-failsafe.md) | brake_light | BL-FS-* | DE-00, DE-01 | 🟢 |
+| **DE-04** | [LED render & bar driver](de-04-led-render.md) | brake_light | BL-RND-*, BL-LED-* | DE-00 | 🟢 binary GPIO; brightness deferred |
 | **DE-05** | Battery & charge management | brake_light | BL-PWR-* | DE-00 | 🔲 |
 | **DE-06** | TX power / sleep / wake | transmitter | TX-PWR-* | DE-00 | 🔲 |
 | **DE-07** | CAN capture & offline analysis — bench (PCAN-USB) + [ride logger](../../logger/) (custom ESP32-S3 PCB) | host + [`logger/`](../../logger/) | (enables TX-DEC) | — | 🟡 |
 | **DE-08** | [Embedded CAN decode](de-08-can-decode.md) | transmitter | TX-CAN-*, TX-DEC-* | DE-00, DE-07 | 🔲 |
 | **DE-09** | [Braking state machine](de-09-brake-decel-logic.md) | transmitter | TX-SM-* | DE-00, DE-08 | 🔲 |
-| **DE-10** | [Status-indicator LED](de-10-status-indicator.md) | brake_light | BL-IND-* | DE-00 | 🔲 |
+| **DE-10** | [Status-indicator LED](de-10-status-indicator.md) | brake_light | BL-IND-* | DE-00 | 🟡 minimal link-health slice landed |
+
+> **DE-02 is deferred, not dropped.** The owner's call was to get a working on/off brake
+> light first: the bar is driven as a binary GPIO with the LED current fixed in hardware,
+> and brightness/PWM/ambient dimming comes later. The decision is recorded in
+> [DE-04](de-04-led-render.md); the `ISL29035` ambient sensor is already on the board and
+> unused, so nothing has to change in hardware when it is picked back up. This also
+> pulled a minimal slice of DE-10 forward, out of build order, because link-loss
+> indication had to move off the brake bar — see [DE-03 §4.1](de-03-link-loss-failsafe.md).
 
 DE-05…DE-06 don't have stub docs yet; they get one when scheduled. DE-07 is the
 bench/ride reverse-engineering captured in [`can-profiles.md`](../can-profiles.md); the

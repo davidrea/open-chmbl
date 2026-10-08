@@ -102,16 +102,35 @@ not suggestions.
 - **No blinding.** Ambient-light auto-dimming is a **safety requirement**: at night a
   full-brightness bar would dazzle following riders/drivers; in daylight it must
   still be visible.
+
+  > ⚠️ **Auto-dimming is currently deferred.** The firmware drives the bar as a plain
+  > binary on/off output and the LED current is fixed in hardware, to get a working light
+  > first ([DE-04](design/de-04-led-render.md); deferred element
+  > [DE-02](design/de-02-auto-brightness.md)). **Deferring the mechanism does not retire
+  > this requirement.** One fixed setpoint cannot serve both the daylight target and the
+  > night floor, so until DE-02 lands the setpoint must be chosen knowing which end is
+  > compromised, and that choice has to be stated in the build docs. Treat a bright,
+  > undimmed bar as a **night-time glare hazard** and keep the project to
+  > track/off-road/daylight use until it is dimmable.
 - **Weatherproofing.** IP65+; condensation and vibration are constant.
 
 ---
 
 ## 4. Link-failure behavior (the system side)
 
-- On lost radio link the brake_light shows a **distinct link-lost indication**
-  (steady running light + slow fault blink). It must **never**:
+- On lost radio link the brake_light shows a **distinct link-lost indication**. It must
+  **never**:
   - go silently dark (rider/traffic think the device is fine when it isn't), or
   - **latch a fake `BRAKE`** (crying wolf trains following traffic to ignore it).
+- **Where that indication lives.** The brake bar itself is **binary on/off** and must not
+  be blinked — a blinking stop lamp is exactly the §1 prohibition above. So the bar is
+  held **steady off** on link loss and the indication goes to the **separate
+  status-indicator LED** (plus `link show` on the developer console). The bar is also not
+  *silently* dark: the status LED says so independently, and a stale `BRAKE` is released
+  within the timeout rather than latched. Reasoning:
+  [`design/de-03-link-loss-failsafe.md §4.1`](design/de-03-link-loss-failsafe.md).
+  (The earlier "steady running light + slow fault blink" on the bar needed a dim
+  brightness tier, which is deferred — see §3.)
 - Stale/old packets are dropped; the heartbeat model means *absence* of packets is
   the fault signal.
 
