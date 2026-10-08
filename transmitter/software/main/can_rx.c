@@ -15,6 +15,7 @@
 
 #include "bike_profiles.h"
 #include "status_led.h"
+#include "trc_log.h"
 
 static const char *TAG = "can_rx";
 
@@ -210,6 +211,11 @@ static void can_rx_task(void *arg)
         }
         status_led_can_activity();
 
+        /* Every frame, before the decode filter below discards most of them:
+         * a ride log has to be complete. Outside the critical section, since
+         * it queues. A no-op unless a capture is open. */
+        trc_log_frame(&msg);
+
         uint32_t t = now_ms();
         taskENTER_CRITICAL(&s_lock);
         s_stats.frames_rx++;
@@ -275,7 +281,13 @@ void can_rx_init(void)
         (gpio_num_t)CONFIG_CHMBL_CAN_TX_GPIO,
         (gpio_num_t)CONFIG_CHMBL_CAN_RX_GPIO,
         TWAI_MODE_LISTEN_ONLY);
+#if CONFIG_CHMBL_TRC_LOG
+    /* Accept-all puts the whole bus (~1500 frames/s peaks) through this
+     * queue; 128 is the depth the logger firmware runs at the same load. */
+    g.rx_queue_len = 128;
+#else
     g.rx_queue_len = 32;
+#endif
 
     twai_timing_config_t timing;
     if (s_profile->bitrate == 250000) {
@@ -292,6 +304,14 @@ void can_rx_init(void)
 
     twai_filter_config_t filter;
     profile_filter(s_profile, &filter);
+#if CONFIG_CHMBL_TRC_LOG
+    /* Ride logging records the whole bus, so override with accept-all. The
+     * profile filter only spans the decode IDs: for the TR profile it
+     * requires ID bits 3, 4 and 9 clear, rejecting ~7/8 of the ID space, and
+     * a capture taken behind it would be silently incomplete. The decoder
+     * ignores non-profile IDs, so decode is unaffected. */
+    filter = (twai_filter_config_t)TWAI_FILTER_CONFIG_ACCEPT_ALL();
+#endif
 
     esp_err_t err = twai_driver_install(&g, &timing, &filter);
     if (err == ESP_OK) {

@@ -9,8 +9,12 @@
 # toolchain used in CI, driver/twai.h is provided by the umbrella `driver`
 # component.
 # `console` transitively pulls the USB Serial/JTAG and UART console drivers it
-# needs. can_decode.c / brake_fsm.c / bike_profile_triumph_tr.c are pure C,
-# also compiled on the host by test_host/ for the golden and FSM-parity tests.
+# needs. Ride logging (trc_log.c) adds the microSD stack — fatfs, sdmmc and
+# esp_driver_sdmmc, exactly as the logger firmware declares them — and is
+# compiled in either way; CONFIG_CHMBL_TRC_LOG=n reduces it to no-op stubs.
+# can_decode.c / brake_fsm.c / bike_profile_triumph_tr.c / log_gate.c are
+# pure C, also compiled on the host by test_host/ for the golden, FSM-parity
+# and gate tests.
 idf_component_register(SRCS "main.c"
                             "console.c"
                             "cmd_system.c"
@@ -27,7 +31,12 @@ idf_component_register(SRCS "main.c"
                             "brake_fsm.c"
                             "brake_ctl.c"
                             "status_led.c"
+                            "log_gate.c"
+                            "trc_format.c"
+                            "trc_log.c"
+                            "cmd_rec.c"
                        INCLUDE_DIRS "."
                        PRIV_REQUIRES esp_driver_gpio console esp_hw_support
                                      driver esp_timer
-                                     esp_wifi esp_netif esp_event nvs_flash)
+                                     esp_wifi esp_netif esp_event nvs_flash
+                                     fatfs sdmmc esp_driver_sdmmc)
