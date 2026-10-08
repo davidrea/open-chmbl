@@ -1,9 +1,14 @@
 ## Managed component dependencies for the logger app.
 ##
-## Just the debounced-button component; everything else (TWAI, FAT/SD, timers)
-## comes from ESP-IDF itself (see main/CMakeLists.txt PRIV_REQUIRES). The display
-## has been removed, so no BSP / LVGL / esp_lcd dependencies.
+## There are none. Everything the app uses comes either from ESP-IDF itself
+## (TWAI, FAT/SD, timers, GPIO — see main/CMakeLists.txt PRIV_REQUIRES) or from
+## the repo's own components/ directory, which is wired in through
+## EXTRA_COMPONENT_DIRS rather than the component manager.
+##
+## The espressif/button (iot_button) dependency was dropped when the pushbutton
+## left the recording path: recording is now gated automatically on the decoded
+## engine kill switch, and nothing else needed debounced button input. The
+## button's Kconfig pin is retained and documented as unused.
 dependencies:
   idf:
     version: ">=5.2"
-  espressif/button: "^4"

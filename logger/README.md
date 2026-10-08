@@ -18,15 +18,41 @@ This board is also the base design the [`transmitter/`](../transmitter) reuses
 - [`hardware/`](hardware) — the custom ESP32-S3 PCB: schematics, connectors, power,
   and a known strapping-pin issue to check before relying on a board. See
   [`hardware/README.md`](hardware/README.md).
-- [`software/`](software) — ESP-IDF firmware. **Currently still targets the retired
-  ESP-WROVER-KIT bring-up hardware (`esp32`)**, not yet ported to the custom board
-  above — see the status note in [`software/README.md`](software/README.md). Pins,
-  wiring, the `.trc` format, and build/flash steps for the current target are
-  documented there.
+- [`software/`](software) — ESP-IDF firmware, targeting the custom board above
+  (`esp32s3`; the retired ESP-WROVER-KIT is no longer supported). Pins, wiring, the
+  `.trc` format, the recording policy, the FSM tunables and build/flash steps are all
+  documented in [`software/README.md`](software/README.md).
 
 > Listen-only by default — the logger never ACKs or transmits, per the repo's
-> [golden rule](../docs/can-profiles.md#1-golden-rule-listen-only). Power-loss and
-> card-removal robustness are intentionally out of scope.
+> [golden rule](../docs/can-profiles.md#1-golden-rule-listen-only). The TCAN330's
+> silent pin is read back at boot (so a missing `R16` is reported rather than masked)
+> and then driven high, and the TWAI controller is held in listen-only mode as well.
+
+## Two jobs at once: logging, and the brake-light preview
+
+The firmware is the **ride-validation build**. Alongside capturing the bus it runs the
+real [DE-09 braking state machine](../docs/design/de-09-brake-decel-logic.md) on-board,
+against the real decoded signals, at the real 50 Hz tick — and lights the **remote LED**
+on `J4` pin 2 whenever it would be commanding the rider-side brake light **ON**
+(`BRAKING` or `STOPPED`; steady, never blinking).
+
+There is **no ESP-NOW in this build**: the LED stands in for the radio. So you can ride
+with the logger, watch the FSM's actual decision on a panel-mount LED, and afterwards
+read the `.trc` together with the console transition log — which records every
+transition with its rule number and the decisive speed/accel/clutch/gear values — to see
+exactly why it decided that. The product path remains the
+[`transmitter`](../transmitter).
+
+**Recording is automatic and silent.** There is no start/stop button and no status LED:
+the device opens a new `N.trc` whenever the engine kill switch reads **RUN**, and closes
+it when the switch goes to STOP or the bus falls silent. It flushes and `fsync`s every
+couple of seconds so losing 12 V mid-ride still leaves a readable trace. Details and
+timeouts: [`software/README.md`](software/README.md).
+
+> **Power loss** no longer loses the whole capture — the periodic flush/`fsync` bounds
+> the loss to the last couple of seconds — but a file cut short that way has no
+> `;closed:` footer. Card-removal robustness goes no further than shutting the capture
+> down cleanly rather than wedging the writer.
 
 ## Visualizing a log
 

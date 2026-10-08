@@ -4,15 +4,10 @@
 # Target is the ESP32-S3-WROOM-1-N4 on the custom logger PCB
 # (logger/hardware/logger.kicad_sch). Select it with
 # `idf.py set-target esp32s3` (or the `target` input of the CI action).
+# Target-shaped options live in sdkconfig.defaults.esp32s3.
 #
-# The retired ESP-WROVER-KIT (`esp32`) is no longer supported: the pin map,
-# console transport and LED set below are all specific to the logger PCB.
-
-# --- Console: the board has no UART bridge (BRINGUP.md §0), so the console has
-#     to ride the S3's native USB-serial-JTAG or there is no log output at all.
-#     Selecting this choice disables the UART console (CONFIG_ESP_CONSOLE_UART_NUM
-#     becomes -1). Proven on hardware through BRINGUP.md §3.5/§4. ---
-CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# The retired ESP-WROVER-KIT (`esp32`) is no longer supported: the pin map, the
+# console transport and the indicator set are all specific to the logger PCB.
 
 # --- Flash: U1 is an ESP32-S3-WROOM-1-N4 (schematic + BOM, LCSC C2913197):
 #     4 MB flash, NO PSRAM. Verified on the bench -- flash_id reports JEDEC
@@ -22,7 +17,11 @@ CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 #     "Detected size(4096k) smaller than the size in the binary image header" ->
 #     assert failed at startup_funcs.c:114. Note the bootloader still prints
 #     "SPI Flash Size : 8MB" in that case -- that's the image header being
-#     echoed, not a probe of the fitted part. ---
+#     echoed, not a probe of the fitted part.
+#
+#     Kept in the target-agnostic file on purpose: this describes the fitted
+#     module, and getting it wrong bricks the boot, so it must not depend on
+#     the per-target file being picked up. ---
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
 # --- Partition table: single app, no OTA, sized against the 4 MB part. The
@@ -31,13 +30,16 @@ CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 #     ~1.5 MB of headroom. There is no OTA on this board. ---
 CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
 
-# --- NOTE: no CONFIG_SPIRAM here, deliberately. The -N4 module has no PSRAM;
-#     the option must be absent (not merely =n) for this target. The frame
-#     queue and the 32 KB .trc write buffer both fit in internal RAM. ---
+# --- NOTE: no CONFIG_SPIRAM anywhere in these files, deliberately. The -N4
+#     module has no PSRAM; the option must be absent (not merely =n). ---
 
 # --- FAT filesystem: allow long filenames so the microSD's existing files list
 #     cleanly even though our own logs are short 8.3 names (N.trc) ---
 CONFIG_FATFS_LFN_STACK=y
 
-# --- Smaller, quieter default log level for shipping firmware ---
+# --- Smaller, quieter default log level for shipping firmware. Note that the
+#     operations log and the DE-09 transition log both go out at INFO, and in
+#     this build the console is the ONLY diagnostic surface (recording is
+#     silent, the remote LED is the brake-light preview) -- do not raise this
+#     above INFO for a ride. ---
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y

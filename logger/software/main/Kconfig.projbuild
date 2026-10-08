@@ -3,25 +3,32 @@
 # logger/hardware/BRINGUP.md §0. Do not take pin numbers from the older
 # logger_sch_revA.pdf or from hardware/README.md — both are stale.
 #
-# Ranges are 0..48 throughout: the ESP32-S3's GPIO range.
+# Ranges are 0..48 throughout: the ESP32-S3's GPIO range. The retired
+# ESP-WROVER-KIT (`esp32`) target is not supported — the pin map, the native-USB
+# console and the LED set are all specific to this board — so the defaults here
+# are unconditional rather than per-IDF_TARGET.
 
 menu "CAN logger configuration"
 
     config LOGGER_BUTTON_GPIO
-        int "Start/stop pushbutton GPIO number"
+        int "Pushbutton GPIO number (UNUSED in this build)"
         range 0 48
         default 6
         help
-            GPIO wired to the momentary start/stop pushbutton (BTN_SIG, J4 pin3,
-            other side to GND). Active-low: R5 pulls the line up on-board, and
-            pressing the button pulls it to GND.
+            GPIO wired to the momentary pushbutton (BTN_SIG, J4 pin3, other side
+            to GND). Active-low: R5 pulls the line up on-board, and pressing the
+            button pulls it to GND.
 
-            The internal pull-up is deliberately left DISABLED in firmware so
-            R5 does the work — an internal pull would read high even if R5 were
-            missing or unstuffed, turning a real board fault into a false pass.
-            This mirrors the card-detect reasoning in BRINGUP.md §4.5.
+            NOT USED BY THIS FIRMWARE. Recording is fully automatic, gated on
+            the decoded engine kill switch (see "Automatic recording policy"
+            below), so there is no start/stop button and no iot_button
+            dependency. The symbol is retained rather than deleted because the
+            pin is still routed on the board and documented in BRINGUP.md §0/§7,
+            and a future build (a mark button, a safe-eject hold) would want it
+            back here rather than rediscovered.
 
-            Debouncing is handled in software by the espressif/button component.
+            The firmware configures nothing on this pin, so it floats at R5's
+            pull-up.
 
     config LOGGER_CAN_TX_GPIO
         int "CAN (TWAI) TX GPIO number -> transceiver TXD"
@@ -52,16 +59,25 @@ menu "CAN logger configuration"
             transceiver receives but its driver is disabled, so it cannot put a
             dominant bit — not even an ACK — on the bus.
 
-            The firmware configures this pin as a HIGH-IMPEDANCE INPUT with both
-            internal pulls disabled and never drives it, so R16 alone holds the
-            transceiver silent. That makes silent mode the power-on default and
-            the failure-safe state: it holds through reset, through boot before
-            app_main runs, and through a firmware crash. This is the hardware
-            half of the project's golden rule (never disturb a live vehicle bus);
-            CONFIG_LOGGER_CAN_LISTEN_ONLY below is the controller half.
+            At boot the firmware first reads this pin back as a HIGH-IMPEDANCE
+            input with both internal pulls disabled — so a missing or unstuffed
+            R16 shows up as a loud console warning instead of being masked — and
+            THEN drives it high and leaves it there. Silence therefore does not
+            depend on a single 10K resistor for a whole ride, while the board
+            fault that would let the logger transmit onto a live bus is still
+            detected.
 
-            Changing this to an output is a deliberate, bench-only act — see
-            BRINGUP.md §5.5, and only on an isolated bus.
+            R16 covers the windows the firmware cannot: power-on, reset, and
+            boot before app_main runs. A GPIO output latch holds its level
+            through a firmware crash, so driving it does not weaken that.
+
+            This is the hardware half of the project's golden rule (never
+            disturb a live vehicle bus); CONFIG_LOGGER_CAN_LISTEN_ONLY below is
+            the controller half.
+
+            Driving this LOW (normal mode) is a deliberate, bench-only act — see
+            BRINGUP.md §5.5, and only on an isolated bus. This firmware never
+            does it.
 
     choice LOGGER_CAN_BITRATE
         prompt "CAN bit rate"
@@ -100,6 +116,70 @@ menu "CAN logger configuration"
             Depth of the queue buffering frames between the CAN receive task and
             the microSD writer task. Deeper tolerates longer SD write stalls at
             the cost of RAM. Overflows are counted and logged to the console.
+
+            Frames reach this queue only while recording. The decode tap that
+            feeds the DE-09 preview and the recording gate sees EVERY frame
+            regardless — otherwise the gate could never turn recording on.
+
+endmenu
+
+menu "Automatic recording policy"
+
+    # Recording is not operated by hand in this build. The gate is the decoded
+    # `engine_cutoff` signal from the bike profile — 0x121 bit 30 set AND 0x121
+    # byte 6 == 0x28 — where 1 means the kill switch is ASSERTED (STOP) and 0
+    # means RUN. A new N.trc opens when the gate reads RUN, and closes on
+    # RUN -> STOP or on bus silence. See logger_main.c and
+    # logger/software/README.md.
+
+    config LOGGER_BUS_SILENCE_MS
+        int "Bus-silence timeout that closes the file (ms)"
+        range 1500 60000
+        default 3000
+        help
+            If no 0x121 frame carrying the kill-switch signal arrives for this
+            long, the bus is treated as dead — which is what ignition-off looks
+            like from the logger's side — and the open capture is closed.
+
+            Must be comfortably ABOVE the decoder's own staleness window
+            (CAN_DECODE_STALE_MS, 1000 ms). The gap between the two is
+            deliberate hysteresis: a fresh reading (age <= 1000 ms) sets the
+            gate, silence (age > this) closes the file, and in between the gate
+            HOLDS. Without that gap a brief run of missed frames would chop one
+            ride into two files.
+
+    config LOGGER_FLUSH_INTERVAL_MS
+        int "Durability flush interval (ms)"
+        range 200 60000
+        default 2000
+        help
+            How often the writer fflush()es and fsync()s the open .trc.
+
+            There is no longer a button press to end a file cleanly, and the
+            board can lose 12 V at any moment, so the 32 KB stdio buffer plus
+            FATFS's in-RAM metadata is a real window of a ride to lose. fsync()
+            is what makes FATFS commit the dirty sectors AND the directory
+            entry, so the file ends up with a correct length and a reader can
+            actually see the data.
+
+            This BOUNDS the loss window; it does not replace the large write
+            buffer, which is what keeps throughput ahead of a ~1500 frames/s
+            bus. Smaller values lose less to a power cut and cost more card
+            writes; a per-frame fsync would collapse throughput entirely, which
+            is the problem the write buffer exists to solve.
+
+    config LOGGER_FLUSH_KIB
+        int "Durability flush byte budget (KiB)"
+        range 1 1024
+        default 64
+        help
+            The writer also flushes once this many KiB have been written since
+            the last flush, whichever comes first. On a quiet bus the interval
+            dominates; under a flood this caps the loss window by volume rather
+            than by time.
+
+            64 KiB is two .trc write buffers' worth — roughly half a second of
+            the reference bus at its ~1500 frames/s peak.
 
 endmenu
 
@@ -179,35 +259,56 @@ menu "microSD (SDMMC)"
 
 endmenu
 
-menu "Status indicators"
+menu "Indicators"
 
-    # All three LEDs on this board are active-high: the GPIO sources into the
-    # LED (D5/D6, via R20/R21) or into Q1's gate (external indicator). There is
-    # no active-low option because there is no active-low LED on the board.
+    # Every LED on this board is active-high: the GPIO sources into the LED
+    # (D5/D6, via R20/R21) or into Q1's gate (remote LED). There is no
+    # active-low option because there is no active-low LED on the board.
+    #
+    # This build has NO LED status indication for logging. The remote LED is the
+    # DE-09 brake-light preview and nothing else — sharing it with logger status
+    # would make the FSM decision unreadable, which is the point of the build —
+    # and the onboard D5/D6 are inside the sealed enclosure and invisible on a
+    # ride. Recording is silent; the console log is the diagnostic surface.
 
     config LOGGER_LED_EXT_GPIO
-        int "External indicator LED GPIO number"
+        int "Remote brake-preview LED GPIO number"
         range 0 48
         default 18
         help
-            Drives Q1 (2N7002K) through R3, low-side switching the remote
-            indicator LED on J4 pin2; R18 holds the gate down. This is the LED
-            in the operator's handlebar pod, alongside the start/stop button.
-            High = LED lit (BRINGUP.md §7.2).
+            Drives Q1 (2N7002K) through R3, low-side switching the remote LED on
+            J4 pin2; R18 holds the gate down. High = LED lit
+            (BRINGUP.md §0/§7.2).
 
-    config LOGGER_LED_GREEN_GPIO
-        int "Onboard green LED (D5) GPIO number"
-        range 0 48
-        default 2
+            In this firmware the LED shows the DE-09 brake-light decision and
+            nothing else: ON whenever the state machine is in BRAKING or
+            STOPPED, i.e. whenever this firmware would be commanding ST_BRAKE
+            over ESP-NOW — which it does not transmit in this build. A steady
+            level, no blinking, no brightness control.
+
+    config LOGGER_FAULT_LED_ENABLE
+        bool "Blink an onboard LED on a fatal error"
+        default n
         help
-            D5, green, via R20. Active-high. Shows CAN bus liveness.
+            Off by default, and intended for bench work only.
 
-    config LOGGER_LED_RED_GPIO
-        int "Onboard red LED (D6) GPIO number"
+            D5/D6 sit on the PCB inside the sealed enclosure, so on a ride they
+            tell nobody anything. With this enabled, a latched fatal error (no
+            card, mount failure, CAN start failure, transceiver not silent)
+            blinks the LED below at 2 Hz. With it disabled the firmware touches
+            neither onboard LED at all and both pins stay free.
+
+            This is the ONLY onboard indication in this build. There is
+            deliberately no recording-state, bus-liveness or card-activity
+            pattern — see the menu comment above.
+
+    config LOGGER_FAULT_LED_GPIO
+        int "Fatal-error LED GPIO number"
         range 0 48
         default 1
+        depends on LOGGER_FAULT_LED_ENABLE
         help
-            D6, red, via R21. Active-high. Shows microSD write activity, and
-            doubles as the error indicator.
+            D6, red, via R21, active-high (BRINGUP.md §0/§4.1). Set to 2 to use
+            D5 (green) instead.
 
 endmenu

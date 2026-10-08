@@ -23,10 +23,29 @@ finish and sign it off before moving to the next. Work USB-powered on the bench 
 > is still unverified on hardware.**
 >
 > Two things the port carries that bring-up should lean on: the CAN silent pin (IO35)
-> is parked **high-impedance and read back at boot**, with a loud console warning if
-> it is not high (that is §4.2 answered from the chip side), and *microSD → SDMMC bus
-> width* is Kconfig-selectable 1-bit/4-bit with the negotiated width printed at mount,
-> which is exactly the §6.2 → §6.3 progression.
+> is **read back high-impedance at boot and then driven high**, with a loud console
+> warning if the hi-z read is not high (that is §4.2 answered from the chip side — and
+> the readback comes first precisely so a missing `R16` is reported rather than masked
+> by the drive), and *microSD → SDMMC bus width* is Kconfig-selectable 1-bit/4-bit with
+> the negotiated width printed at mount, which is exactly the §6.2 → §6.3 progression.
+>
+> **The firmware has since changed shape** (see
+> [`../software/README.md`](../software/README.md)): it is now the **ride-validation
+> build**, which also runs the [DE-09](../../docs/design/de-09-brake-decel-logic.md)
+> braking state machine on-board and drives **IO18** from its output. Consequences for
+> this plan:
+>
+> * **§7.2 is now exercised by the shipping firmware** — see the note under §7.
+> * **§7.3 (button) is not.** Recording is gated automatically on the decoded engine
+>   kill switch; the pushbutton is unused, and the `iot_button` dependency is gone. Use
+>   a scratch app for IO6.
+> * **§9.1 changed:** there is no button start/stop and no LED status to verify. What
+>   §9.1 should now confirm is automatic start on kill-switch RUN, close on STOP and on
+>   bus silence, the periodic flush/`fsync` leaving a readable file after a power cut,
+>   and the FSM transition log tracking the LED. Treat the step's wording as stale, not
+>   the objective.
+> * **§4.1's LED pass still stands** — D5/D6 are now unused by default (they are
+>   invisible inside the enclosure), which does not invalidate the result.
 >
 > **Still outstanding:** the Kconfig-gated **self-test mode** described in the original
 > plan — a console command or boot-time button hold that walks each peripheral in turn
@@ -212,10 +231,12 @@ ESP32-S3 (QFN56) rev v0.2, no PSRAM; flash = 4 MB (matches `-N4`); esptool repor
 > green alone, before alternating — so it also confirms IO1/IO2 are **not swapped**
 > relative to the §0 netlist map, which a simultaneous blink could not distinguish.
 > Done with the scratch app [`../software/bringup/blink/`](../software/bringup/blink/),
-> **not** the self-test mode. The IO1/IO2 assignments this step confirmed are now
-> carried in the ported firmware's indicator module (`status_led.[ch]`), which also
-> drives the external LED on IO18 — that third LED is **not** covered by this step and
-> is still §7.2.
+> **not** the self-test mode. The result stands, but note the firmware moved on: D5/D6
+> are now **unused by default** (they are invisible inside the sealed enclosure), with
+> only an opt-in, default-off fatal-error blink on D6
+> (`CONFIG_LOGGER_FAULT_LED_ENABLE`, `fault_led.[ch]`). The IO1/IO2 assignments this
+> step confirmed are carried there. The external LED on IO18 is **not** covered by this
+> step — it is now the DE-09 brake-light preview and is still §7.2.
 >
 > **4.5 pass:** IO8 reads **high with J5 empty** and **low with a card seated**, and
 > transitions cleanly on insert/remove at runtime. Read with the **internal pull-up
@@ -298,6 +319,29 @@ ESP32-S3 (QFN56) rev v0.2, no PSRAM; flash = 4 MB (matches `-N4`); esptool repor
 
 > Note: §7 covers the **external** LED on J4 via Q1 (IO18). The **onboard** status LEDs
 > D5/D6 are §4.1 and are already passing — the two are independent circuits.
+>
+> ### 7.2 is now exercised by real firmware, not a scratch app
+>
+> The logger app drives **IO18** as the [DE-09](../../docs/design/de-09-brake-decel-logic.md)
+> brake-light preview: active-high, a steady level, on whenever the on-board state
+> machine is in `BRAKING` or `STOPPED`. So 7.2 can be run against the shipping firmware
+> rather than a blink sketch — and it gives a stronger result than a bare toggle,
+> because the console prints every state transition with its rule number alongside the
+> LED change, so "Q1 sinks and the LED lights" and "the LED tracks the FSM" are
+> confirmed together.
+>
+> **How to run it:** no bus needed. With the board on USB, the FSM holds the light OFF
+> while wheel speed is invalid, which is itself the "low = off" half of the step. For
+> the "high = lit" half, feed the board a bus (§5.3) or set
+> `CONFIG_BRAKE_FSM_STOP_SPEED_MMPH` high enough that rule 2 latches `STOPPED` on a
+> zeroed speed — then restore it.
+>
+> **Still `—`. Nothing here has been run on hardware; this note records that the
+> firmware to run it with now exists, not a result.** `R4`'s current setting (the rest
+> of 7.2) and §7.1/§7.3/§7.4 are untouched by this. Note that **§7.3 — the button — is
+> no longer exercised by the logger firmware at all**: recording is gated automatically
+> on the decoded kill switch and the pushbutton is unused, so 7.3 needs a scratch app in
+> [`../software/bringup/`](../software/bringup/) or a meter on IO6.
 
 ---
 
@@ -332,7 +376,7 @@ ESP32-S3 (QFN56) rev v0.2, no PSRAM; flash = 4 MB (matches `-N4`); esptool repor
 
 | # | Step | Status |
 |---|------|:------:|
-| 1 | Run the fully-ported logger firmware (self-test mode off): listen-only CAN capture → timestamp → `.trc` write to microSD, button start/stop, LED status. | — |
+| 1 | Run the logger firmware: listen-only CAN capture → timestamp → `.trc` write to microSD, **automatic** start on kill-switch RUN / close on STOP or bus silence, periodic flush survives a power cut, and the DE-09 transition log tracking the remote LED. (Was "button start/stop, LED status" — see the firmware-approach note.) | — |
 | 2 | Capture a live 500 kbit/s bus for ≥30 min; confirm zero dropped frames and file integrity (`python-can` TRCReader / `tools/trc_viz.html`). | — |
 | 3 | Power-source hot-swap USB↔12 V mid-capture; confirm the board survives the diode-OR handoff (data loss on cut is acceptable — out of scope). | — |
 | 4 | Thermal soak at 12 V for ≥1 hr; log rail voltages and U1/U2/U4 temps. | — |
@@ -347,7 +391,9 @@ ESP32-S3 (QFN56) rev v0.2, no PSRAM; flash = 4 MB (matches `-N4`); esptool repor
 - [ ] Strapping clean; **IO35 silent-pin rework confirmed** (IO45 unstuffed/floating)
 - [ ] CAN RX in listen-only verified; no bus ACK/TX; normal-mode TX works on isolated bus
 - [ ] microSD 4-bit mount + sustained write, CRC-clean
-- [ ] Button + external/onboard LEDs functional
+- [ ] Remote LED (IO18/Q1) functional and tracking the DE-09 FSM; onboard D5/D6 pass
+      (§4.1 ✅, now unused by default); button (IO6) functional — needs a scratch app,
+      the logger firmware no longer uses it
 - [ ] Reverse-polarity and diode-OR protection verified
 - [ ] ≥30 min live capture, zero drops; thermal soak passed
 - [x] `esp32s3` firmware port complete (pin map, three-LED status, no PSRAM, 4 MB, native-USB console) — builds clean; hardware verification is the unchecked boxes above

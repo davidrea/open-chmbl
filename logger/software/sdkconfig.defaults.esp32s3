@@ -1,0 +1,28 @@
+# Target-specific defaults, applied on top of sdkconfig.defaults when the target
+# is esp32s3 (ESP-IDF appends sdkconfig.defaults.<target> automatically — the
+# same mechanism brake_light/software/sdkconfig.defaults.esp32c3 uses).
+#
+# esp32s3 is the PRIMARY and only supported target: the custom logger PCB's
+# ESP32-S3-WROOM-1-N4 (logger/hardware/logger.kicad_sch). Select it with
+# `idf.py set-target esp32s3`, or the `target` input of the CI action.
+
+# --- Console: the board has no UART bridge (BRINGUP.md §0), so the console has
+#     to ride the S3's native USB-serial-JTAG or there is no log output at all —
+#     and in this build the console IS the diagnostic surface, since recording is
+#     silent and the remote LED belongs to the brake-light preview.
+#
+#     Selecting this choice disables the UART console
+#     (CONFIG_ESP_CONSOLE_UART_NUM becomes -1). Proven on hardware through
+#     BRINGUP.md §3.5/§4.
+#
+#     This is the one genuinely target-shaped option, which is why it lives
+#     here. Flash size and the partition table are properties of the fitted
+#     module rather than of the SoC, and stay in sdkconfig.defaults where a
+#     mis-set target cannot silently drop them (building at the wrong flash size
+#     boot-loops before app_main — see BRINGUP.md §3). ---
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# --- NOTE: no CONFIG_SPIRAM here, deliberately, and none in sdkconfig.defaults
+#     either. The -N4 module has no PSRAM; the option must be ABSENT, not merely
+#     =n, for this target. The frame queue, the 32 KB .trc write buffer, the
+#     decode tap and the FSM all fit in internal RAM. ---

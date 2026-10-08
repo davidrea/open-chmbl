@@ -70,8 +70,8 @@ Used for **wheel speed** and anything that only exists in motion. A self-contain
 **custom logger PCB** ([`logger/`](../logger/), ESP32-S3 + onboard CAN transceiver —
 see [`logger/hardware/README.md`](../logger/hardware/README.md)) records
 **timestamped** frames to its on-board microSD during real riding — no Linux to
-babysit. (Firmware currently still targets the original ESP-WROVER-KIT bring-up
-hardware, not yet ported to the custom PCB — see
+babysit. (Firmware targets the custom PCB — `esp32s3` — and records automatically
+whenever the engine kill switch reads RUN, with no button to press; see
 [`logger/software/README.md`](../logger/software/README.md).) It captures **all** traffic (no filtering) and writes **PCAN `.trc`** files
 that replay through `python-can` exactly like the bench captures. (This replaces the
 Raspberry Pi / SocketCAN + `candump` rig originally sketched here.)
