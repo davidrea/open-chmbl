@@ -1,34 +1,43 @@
 /*
  * transmitter (bike-side) firmware — entry point.
  *
- * Current stage: developer console (DE-00) + ESP-NOW link (DE-01). The real
- * bike-side firmware (TWAI/CAN listen-only + braking state machine) lands on
- * top of this. The stand-in state indicator and the ESP-NOW pairing/
- * heartbeat link come up unconditionally — they're the actual DE-01
- * functionality, not a debug feature — and the dev CLI (gated by
- * CONFIG_CHMBL_CLI) is layered on top to fake/inspect them over the console
- * (see ../../../docs/cli.md).
+ * Runs on the logger PCB (ESP32-S3-WROOM-1-N4, logger/hardware/), which is
+ * also the transmitter's hardware: the same board with the microSD slot (J5)
+ * and, in the final build, the remote pod connector (J4) unpopulated. See
+ * docs/hardware.md §1. While J4 *is* populated on the bench board, its LED
+ * output (IO18) stands in as the brake light.
+ *
+ * Bring-up order matters:
+ *   status_led   first, so a fault found later has somewhere to show up;
+ *   can_rx       parks the transceiver's silent pin before anything can
+ *                touch the bus, then installs TWAI listen-only;
+ *   brake_ctl    starts the 50 Hz DE-09 tick that drives the light;
+ *   console      last, and only when CONFIG_CHMBL_CLI is set — everything
+ *                above is real functionality and comes up regardless.
  */
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "sdkconfig.h"
 
-#include "console.h"
-#include "pairing.h"
-#include "net.h"
+#include "brake_ctl.h"
 #include "can_rx.h"
+#include "console.h"
+#include "net.h"
+#include "pairing.h"
+#include "status_led.h"
 
 static const char *TAG = "transmitter";
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "transmitter starting");
+    ESP_LOGI(TAG, "transmitter starting — logger PCB (ESP32-S3)");
 
-    state_init();
+    status_led_init();
     pairing_init();
     net_init();
     can_rx_init();
+    brake_ctl_init();
 
 #if CONFIG_CHMBL_CLI
     console_start();

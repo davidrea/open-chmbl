@@ -1,6 +1,6 @@
 # DE-09 — Braking state machine
 
-**Status:** 🔲 not started · **Device(s):** transmitter · **Depends on:** DE-00, DE-08
+**Status:** 🟢 implemented · **Device(s):** transmitter · **Depends on:** DE-00, DE-08
 
 The braking state machine: fuse the decoded CAN signals into a `BRAKE` / `OFF` light
 decision. The reference bike (Triumph Speed 400) **does not publish a brake-switch bit
@@ -9,13 +9,22 @@ qualified by clutch and gear/neutral context. Designed as a **pure function** so
 be developed and unit-tested entirely from faked signals — no CAN, no radio. See
 [`firmware.md §braking-state-machine`](../firmware.md#braking-state-machine).
 
-The state machine itself is **specified in an SMC ([State Machine Compiler]) `.sm`
-model** and the generated C is built by a **CMake pre-build step** — see
-[§5](#5-firmware-moduletask-decomposition) and
-[`firmware.md §4`](../firmware.md#4-build--toolchain). The `.sm` model is the single
-source of truth for the transition structure; this document is the rationale.
+The state machine lives in `transmitter/software/main/brake_fsm.c` as a plain,
+dependency-free C function, ticked at 50 Hz by `brake_ctl.c`. This document is the
+rationale; `brake_fsm.c` and the reference implementation it is tested against
+([§5](#5-firmware-moduletask-decomposition)) are the code.
 
-[State Machine Compiler]: https://smc.sourceforge.net/
+> **Not SMC.** Earlier drafts specified this machine in an [SMC (State Machine
+> Compiler)] `.sm` model compiled by a CMake pre-build step. That was dropped when the
+> element was implemented: the calibrated algorithm is three states and one event, and
+> an SMC model would have added a **JRE on every build host and in CI** to generate
+> ~40 lines of switch. What the tooling was meant to buy — one authoritative definition
+> of the transition structure, mechanically checked — is instead bought by
+> [`tools/fsm_check.py`](../../tools/fsm_check.py), which asserts the shipping C and the
+> reference implementation agree tick for tick over a real ride capture. Revisit if the
+> machine grows states (a soft `DECEL` tier would be the trigger).
+
+[SMC (State Machine Compiler)]: https://smc.sourceforge.net/
 
 ## 1. Scope & isolation boundary
 - **In:** the speed/acceleration derivation (smoothing, MPH/s estimate), the
@@ -46,10 +55,27 @@ The machine consumes decoded CAN signals (DE-08) and one **derived** quantity:
 > signal, not an on-board accelerometer/gyro — this is what keeps the design clear of
 > the inertial-detection patent family (see [ARCHITECTURE §1](../../ARCHITECTURE.md#1-why-this-approach)).
 
-**Acceleration estimate.** `accel_mphps` is the slope of `speed_mph` over a short
-window (e.g. linear fit / low-pass over ~100–200 ms), not a raw sample-to-sample diff —
-CAN speed is quantized and noisy, and the whole FSM hinges on a clean derivative.
-Window length and filter are tunables to be calibrated on DE-07 ride logs.
+**Acceleration estimate.** `accel_mphps` is *not* a raw sample-to-sample diff — CAN
+speed is quantized (~0.039 mph) and noisy, and the whole FSM hinges on a clean
+derivative. As implemented in `can_decode.c` (`accel_update`), each wheel-speed frame:
+
+1. goes through a **dt-aware EMA low-pass** with time constant `speed_smooth_ms`
+   (80 ms), so quantization steps and single-sample glitches don't become decel spikes;
+2. is pushed into a **history ring**, and the slope is taken against the newest sample
+   at least `CAN_DECODE_ACCEL_WINDOW_MS` (200 ms) old;
+3. has that slope **exponentially smoothed** (`alpha` 0.3) into the reported value.
+
+> **Size the ring against the frame rate.** The reference bus emits `0x102` at ~100 Hz,
+> so 200 ms of history is ~20 samples; the ring holds 32. Undersize it and the "newest
+> sample ≥ 200 ms old" search never succeeds, so the derived acceleration silently stops
+> updating and the light never comes on — the signal stays *valid*, it just stops
+> moving. The firmware shipped a 16-deep ring for a while and did exactly this; it is
+> the reason `tools/fsm_check.py` exists.
+
+**Signal loss.** `wheel_speed` is the one required input. When it is absent or stale
+(`CAN_DECODE_STALE_MS`, 1 s) the machine is forced to `OFF` and rearmed, so a dropout
+behaves like a fresh boot. A brake light that latches on because the bus went quiet is
+worse than no light at all.
 
 ## 4. State machine
 
@@ -114,33 +140,59 @@ Notes:
   now holds the light rather than blinking.
 
 [DE-07 40 mph ride log]: ../can-profiles.md#decode-table
-- **Anti-strobe** is a global `state_min_dwell_ms` floor: the tick handler will not
-  dispatch a state-changing `Poll` until the floor has elapsed since the last
-  transition. Keeps the `.sm` model focused on logic, not flicker.
+- **Anti-strobe** is a global `state_min_dwell_ms` floor: no guard is evaluated until
+  the floor has elapsed since the last transition. It is deliberately outside the
+  guards, so the transition table stays about logic and not about flicker.
+
+### Tunables
+
+Defaults as shipped in `brake_fsm.h` (`BRAKE_TUNABLES_DEFAULT`), calibrated on the DE-07
+ride logs through [`tools/trc_viz.html`](../../tools/trc_viz.html). Speeds in MPH,
+accelerations in MPH/s. All are settable live with `state tune <name> <value>`, over the
+same ranges as the bench viewer's sliders — except `decel_on_debounce_ms`, whose minimum
+is one tick rather than zero, because a zero debounce degenerates into "on every tick".
+
+| Tunable | Default | Purpose |
+|---------|--------:|---------|
+| `decel_on_mphps` | 2.0 | Deceleration that turns the light **on** (rule 1). |
+| `decel_on_debounce_ms` | 120 | ...held this long first. |
+| `stop_speed_mph` | 1.0 | At/under = "stopped" (rules 2/3, rolling qualifier in 6b). |
+| `moving_speed_mph` | 3.0 | Must be exceeded to leave `STOPPED` for motion (rule 6a). |
+| `accel_off_mphps` | 0.5 | Acceleration that turns the light **off** (rule 4). |
+| `accel_off_min_speed_mph` | 5.0 | ...only above this speed. |
+| `steady_band_mphps` | 0.75 | \|accel\| under this counts as "steady" (rule 5). |
+| `steady_timeout_ms` | 1500 | Steady-after-braking hold before turning off. |
+| `stop_timeout_ms` | 60000 | Max on-time while stopped (rule 6c). |
+| `state_min_dwell_ms` | 250 | Global anti-strobe floor. |
+| `speed_smooth_ms` | 80 | Wheel-speed low-pass ahead of the slope (see §3). |
 
 ## 5. Firmware module/task decomposition
-- **SMC model (`brake_fsm.sm`)** specifies the states, the single `Poll` event, the
-  guards, and the entry actions (`setOutput`, timer resets). It is the single source of
-  truth for the transition structure.
-- **CMake pre-build step** runs SMC (`java -jar Smc.jar -c …`) to generate
-  `brake_fsm_sm.[ch]` into the build tree before the firmware compiles; the firmware
-  target depends on the generated sources so editing the `.sm` triggers regeneration.
-  Optionally also emit a Graphviz `.dot` (`-graph`) so the diagram above stays in sync.
-  Mechanics in [`firmware.md §4`](../firmware.md#4-build--toolchain).
-- **Host context (`BrakeFsmCtx`)** — pure, host-testable: holds the smoothed
-  `speed_mph`/`accel_mphps`, the steady/stop timers, and implements the guard predicates
-  (`isDecelExceeded`, `isStopped`, `isAcceleratingAway`, `isSteadyElapsed`,
-  `isMovingAwayFromStop`, `isClutchReleasedInGear`, `isStopTimeoutElapsed`). This is the
-  primary reason the element is isolated: full unit tests with synthetic speed/time
-  sequences, no hardware and no generated code dependency beyond the FSM shell.
-- **Tick task (~50 Hz)** updates the context from the latest signals, enforces the
-  anti-strobe floor, and fires `Poll` on the generated FSM.
+- **`brake_fsm.[ch]`** — the machine itself: the tunables struct, the three states, the
+  hold timers, and one `brake_fsm_step(fsm, inputs, dt_ms)` call that advances it. Pure
+  C, no ESP-IDF headers, no allocation, no clock of its own — it is handed `dt_ms`. That
+  is what lets the identical code run on target at 50 Hz and on the host over a capture.
+- **`brake_ctl.[ch]`** — the 50 Hz tick task on target: samples the decoded signals
+  (`sig_snapshot`), maps them to FSM inputs (including the validity rules in §3), drives
+  the brake-light output, and holds the `state force` override and the live tunables.
+  All decision-shaped logic stays in `brake_fsm.c`; this is plumbing.
+- **`can_decode.[ch]`** (DE-08) — supplies `speed_mph` and derives `accel_mphps`, per §3.
+- **Reference implementation** — [`tools/trc_viz.py`](../../tools/trc_viz.py) and its
+  in-browser twin [`tools/trc_viz.html`](../../tools/trc_viz.html): the same machine in
+  Python/JS with every tunable on a slider, used to calibrate against ride captures.
+- **Parity test** — [`tools/fsm_check.py`](../../tools/fsm_check.py) replays a capture
+  through `test_host/fsm_replay` (the real `can_decode.c` + `brake_fsm.c`) and through
+  the reference, and asserts **identical state at every tick**, plus agreement on the
+  derived acceleration to 1e-3 mph/s. Runs in CI. This is what keeps the calibration
+  bench and the shipping firmware the same machine; it is also what caught the
+  ring-sizing defect in §3.
 
 ## 6. CLI hooks
 - `sig set wheel <mph>`, `sig set clutch <0|1|na>`, `sig set gear <n|N>`,
-  `sig set throttle`/`rpm` (for completeness); `sig source fake`; `state show`
-  (current state + active timers + derived `accel_mphps`); `state force` (override for
-  downstream tests). See [`cli.md`](../cli.md).
+  `sig set throttle`/`rpm` (for completeness); `sig source fake`; `sig ramp wheel
+  <mph/s>` to drive a synthetic stop through the real derivation.
+- `state show` — state, the inputs the last tick saw, the active timers, the emitted
+  `brake_state_t`; `state force off|brake|auto`; `state tune [<name> <value>]` to sweep
+  a threshold live. See [`cli.md`](../cli.md).
 
 ## 7. Isolation acceptance
 - A synthetic decel ramp steeper than `decel_on_mphps` → `BRAKING` within budget; a
@@ -156,12 +208,23 @@ Notes:
   **not** ping-pong `STOPPED`↔`OFF`.
 - No transition violates the anti-strobe floor; the emitted `brake_state_t` matches the
   state map.
+- **Signal loss:** `sig set wheel na` (or unplugging the bus) drops the light within a
+  stale interval and leaves it off; restoring the signal behaves like a fresh start.
+- **Against real rides:** `tools/fsm_check.py` over the DE-07 captures — tick-for-tick
+  agreement with the reference, including the two captures with mid-ride wheel-speed
+  dropouts, where the firmware holds the light off for the dark ticks and matches
+  everywhere else.
 
 ## 8. Open items
-- Final tunable values and the acceleration smoothing window/filter (calibrate on DE-07
-  wheel-speed ride logs).
-- Confirm `gear`/`neutral` and `wheel_speed` are actually decodable on the reference
-  bus (presumed available because the cluster displays them — verify in DE-07).
+- ~~Final tunable values and the acceleration smoothing window/filter.~~ **Resolved for
+  now:** the table in [§4](#tunables) is what shipped, calibrated on the DE-07 logs in
+  the bench viewer. Treat it as a starting point — it has not yet been ridden behind
+  the real light.
+- ~~Confirm `gear`/`neutral` and `wheel_speed` are actually decodable on the reference
+  bus.~~ **Resolved in DE-07:** all present and decoded (see the golden test).
+- **Not yet validated on the bike.** Every number above comes from replaying captures.
+  The first on-road run with the light live is the real test, and the thing most likely
+  to move is `decel_on_mphps`.
 - ~~Stop-and-go flicker policy (a `STOPPED`→`OFF` hold/hysteresis vs. the literal
   rules).~~ **Resolved:** added `moving_speed_mph` hysteresis on the `STOPPED` exit +
   a rolling qualifier on the launch guard (see [§4 note](#4-state-machine)); validated on

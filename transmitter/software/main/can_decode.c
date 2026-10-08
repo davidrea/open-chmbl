@@ -2,6 +2,7 @@
 
 #include "can_decode.h"
 
+#include <math.h>
 #include <string.h>
 
 /* ---- bit-field extraction ---------------------------------------------- */
@@ -125,9 +126,36 @@ bool can_sig_valid(const sig_value_t *s, uint32_t now_ms)
 
 /* ---- derived acceleration ---------------------------------------------- */
 
-static void accel_update(can_decode_t *d, float speed_mph, uint32_t now_ms)
+/* dt-aware EMA on the raw wheel speed. The time constant form (rather than a
+ * fixed alpha) keeps the filter's behaviour independent of the bus's frame
+ * spacing, which varies. The first sample primes it exactly, so a capture and
+ * a live bus produce the same output from the same samples. */
+static float smooth_speed(can_decode_t *d, float speed_mph, uint32_t now_ms)
 {
-    /* push into the history ring */
+    if (d->smooth_tau_ms == 0) {
+        d->smooth_primed = false;
+        return speed_mph;
+    }
+    if (!d->smooth_primed) {
+        d->smooth_v = speed_mph;
+        d->smooth_t = now_ms;
+        d->smooth_primed = true;
+        return d->smooth_v;
+    }
+
+    const uint32_t dt = now_ms - d->smooth_t;
+    d->smooth_t = now_ms;
+    const float a = (dt == 0) ? 1.0f
+                              : 1.0f - expf(-(float)dt / (float)d->smooth_tau_ms);
+    d->smooth_v += a * (speed_mph - d->smooth_v);
+    return d->smooth_v;
+}
+
+static void accel_update(can_decode_t *d, float raw_mph, uint32_t now_ms)
+{
+    /* low-pass first, then push into the history ring */
+    const float speed_mph = smooth_speed(d, raw_mph, now_ms);
+
     d->spd_v[d->spd_head] = speed_mph;
     d->spd_t[d->spd_head] = now_ms;
     d->spd_head = (uint8_t)((d->spd_head + 1u) % CAN_DECODE_SPEED_HIST);
@@ -177,6 +205,12 @@ void can_decode_init(can_decode_t *d, const bike_profile_t *profile)
 {
     memset(d, 0, sizeof(*d));
     d->profile = profile;
+    d->smooth_tau_ms = CAN_DECODE_SPEED_SMOOTH_MS;
+}
+
+void can_decode_set_speed_smoothing(can_decode_t *d, uint16_t tau_ms)
+{
+    d->smooth_tau_ms = tau_ms;
 }
 
 bool can_decode_feed(can_decode_t *d, uint32_t can_id, const uint8_t *data,

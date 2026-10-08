@@ -19,6 +19,7 @@ extern "C" {
 
 typedef struct {
     bool     started;        /* TWAI driver installed and started */
+    bool     silent_ok;      /* transceiver S pin reads high (silent) */
     uint32_t bitrate;        /* configured bus bit rate */
     uint32_t frames_rx;      /* frames received off the bus */
     uint32_t frames_decoded; /* frames that updated at least one signal */
@@ -34,6 +35,10 @@ void can_rx_init(void);
 
 void can_rx_get_stats(can_rx_stats_t *out);
 const bike_profile_t *can_rx_profile(void);
+
+/* Retune the wheel-speed low-pass ahead of the accel slope (DE-09's
+ * speed_smooth_ms) on both the live and the fake-signal decoders. */
+void can_rx_set_speed_smoothing(uint16_t tau_ms);
 
 /* ---- decoded-signal access (source-aware) ------------------------------ */
 

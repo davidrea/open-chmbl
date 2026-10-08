@@ -1,12 +1,11 @@
 # Firmware
 
 Both units run **ESP-IDF** (chosen for TWAI + ESP-NOW + deep sleep control), on
-different ESP32 variants: the transmitter's hardware plan moved to **ESP32-S3**
-(reusing the [`logger/`](../logger) PCB — see [`hardware.md §1`](hardware.md#1-transmitter-bike-side)),
-while `brake_light` stays on **ESP32-C3**. The transmitter's firmware currently still
-targets `esp32c3`/`esp32` (see [`transmitter/software/README.md`](../transmitter/software/README.md));
-the port to `esp32s3` is pending. The two codebases share a small protocol/profile
-library.
+different ESP32 variants: the transmitter and the logger both run on the
+[`logger/`](../logger) PCB's **ESP32-S3** (see [`hardware.md §1`](hardware.md#1-transmitter-bike-side)),
+while `brake_light` stays on **ESP32-C3**. The transmitter firmware is ported and
+targets `esp32s3` only (see [`transmitter/software/README.md`](../transmitter/software/README.md)).
+The two codebases share a small protocol/profile library.
 
 ```
 transmitter/software/   ← bike-side firmware
@@ -28,7 +27,7 @@ broadcast state over ESP-NOW, manage sleep.
 |------|------|-----|
 | **CAN RX** | bus-driven | TWAI in **listen-only mode**; filter to the profile's CAN IDs; pull `wheel_speed`, `throttle_pct`, `rpm`, `clutch_pulled`, `gear`/`neutral`. (The reference bus carries **no brake-switch bit**.) |
 | **Decode** | per frame | Apply the active [bike profile](can-profiles.md) (ID → bit offset/length/scale) to raw frames. |
-| **State machine** | 50 Hz tick | Derive speed/acceleration, run the FSM, apply anti-strobe dwell, emit current `state`. |
+| **State machine** | 50 Hz tick | Derive speed/acceleration, run the FSM, apply anti-strobe dwell, emit current `state` and drive the light. |
 | **ESP-NOW TX** | 20–50 Hz | Send heartbeat with current state + sequence number. |
 | **Power mgmt** | background | Detect bus-idle / ignition-off → deep sleep; wake on activity. |
 | **Watchdog** | always | Reset on hang; never get stuck asserting a stale state. |
@@ -110,27 +109,29 @@ braking-onset latency bounded and predictable.
 
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
-| `DECEL_ON_MPHPS` | 3.0 | Deceleration that turns the light **on**. |
-| `DECEL_ON_DEBOUNCE_MS` | 120 | Decel must exceed `DECEL_ON_MPHPS` this long before `BRAKING` (rejects momentary dips). |
-| `STOP_SPEED_MPH` | 1.0 | At/under = "stopped" (enter `STOPPED`). |
-| `MOVING_SPEED_MPH` | 3.0 | Must be exceeded to leave `STOPPED` for motion (hysteresis; > `STOP_SPEED_MPH`). |
-| `ACCEL_OFF_MPHPS` | 0.5 | Acceleration that turns the light **off** while moving. |
-| `ACCEL_OFF_MIN_SPEED_MPH` | 5.0 | Only honor the accel-off rule above this speed. |
-| `STEADY_BAND_MPHPS` | 0.5 | \|accel\| under this counts as "steady". |
-| `STEADY_TIMEOUT_MS` | 2000 | Steady-after-decel hold before turning off. |
-| `STOP_TIMEOUT_MS` | 60000 | Max on-time while stopped. |
-| `STATE_MIN_DWELL_MS` | 150 | Global anti-strobe floor on all transitions. |
+| `decel_on_mphps` | 2.0 | Deceleration that turns the light **on**. |
+| `decel_on_debounce_ms` | 120 | Decel must exceed `decel_on_mphps` this long before `BRAKING` (rejects momentary dips). |
+| `stop_speed_mph` | 1.0 | At/under = "stopped" (enter `STOPPED`). |
+| `moving_speed_mph` | 3.0 | Must be exceeded to leave `STOPPED` for motion (hysteresis; > `stop_speed_mph`). |
+| `accel_off_mphps` | 0.5 | Acceleration that turns the light **off** while moving. |
+| `accel_off_min_speed_mph` | 5.0 | Only honor the accel-off rule above this speed. |
+| `steady_band_mphps` | 0.75 | \|accel\| under this counts as "steady". |
+| `steady_timeout_ms` | 1500 | Steady-after-decel hold before turning off. |
+| `stop_timeout_ms` | 60000 | Max on-time while stopped. |
+| `state_min_dwell_ms` | 250 | Global anti-strobe floor on all transitions. |
+| `speed_smooth_ms` | 80 | Wheel-speed low-pass ahead of the slope estimate. |
 
-All tunables are config values, so the behaviour can be retuned without touching the
-state machine. **Anti-strobe:** the tick handler will not dispatch a state-changing
-`Poll` until `STATE_MIN_DWELL_MS` has elapsed since the last transition.
+These are the values calibrated in the bench viewer and shipped in
+`brake_fsm.h`; they are runtime values, not build-time ones, so the behaviour can be
+swept with `state tune` without reflashing. **Anti-strobe:** no guard is evaluated until
+`state_min_dwell_ms` has elapsed since the last transition.
 
-> **Specified with SMC.** This state machine is defined in an [SMC (State Machine
-> Compiler)](https://smc.sourceforge.net/) `.sm` model — the single source of truth for
-> the states, the `Poll` event, and the guards — and the generated C is built by a
-> **CMake pre-build step** (see [§4](#4-build--toolchain)). The numeric work (smoothed
-> speed/acceleration, the steady/stop/dwell timers) lives in a pure, host-testable
-> context that backs the guard predicates.
+> **Plain C, tested against a reference.** The machine is ~40 lines in
+> `transmitter/software/main/brake_fsm.c` (pure, no ESP-IDF), ticked by `brake_ctl.c`.
+> An earlier plan to specify it in an SMC model was dropped — see
+> [DE-09](design/de-09-brake-decel-logic.md) for why. What keeps the definition honest
+> is [`tools/fsm_check.py`](../tools/fsm_check.py), which asserts the shipping C and the
+> calibration bench agree tick for tick over a real ride capture, in CI.
 
 ### Config
 
@@ -143,16 +144,17 @@ typedef struct {
     bool   has_gear_signal;          // false → neutral-aware exits degrade to timeout only
     uint8_t tx_rate_hz;              // 20..50
     // Braking FSM tunables (see table above)
-    float    decel_on_mphps;         // 3.0
+    float    decel_on_mphps;         // 2.0
     uint16_t decel_on_debounce_ms;   // 120  (reject momentary decel dips)
     float    stop_speed_mph;         // 1.0  (enter STOPPED)
     float    moving_speed_mph;       // 3.0  (exit STOPPED; hysteresis)
     float    accel_off_mphps;        // 0.5
     float    accel_off_min_speed_mph;// 5.0
-    float    steady_band_mphps;      // 0.5
-    uint16_t steady_timeout_ms;      // 2000
-    uint16_t stop_timeout_ms;        // 60000
-    uint16_t state_min_dwell_ms;     // 150
+    float    steady_band_mphps;      // 0.75
+    uint16_t steady_timeout_ms;      // 1500
+    uint32_t stop_timeout_ms;        // 60000
+    uint16_t state_min_dwell_ms;     // 250
+    uint16_t speed_smooth_ms;        // 80
 } tx_config_t;
 ```
 
@@ -235,45 +237,36 @@ with the braking signal.
 
 - **ESP-IDF** (recommended) per unit, or PlatformIO with the `espidf` framework.
 - Separate build per board: `transmitter/software/` and `brake_light/software/`.
-- CI later: build both firmwares; unit-test the state machine and the profile
-  decoder on host (they're pure functions — keep them platform-independent so they
-  can be tested without hardware).
+- CI builds every firmware with the real toolchain and runs the host tests below;
+  keep the pure cores (state machine, profile decoder) platform-independent so they
+  stay testable without hardware.
 
-### State Machine Compiler (SMC) pre-build step
+### Host tests for the pure cores
 
-The transmitter's [braking state machine](#braking-state-machine) is **specified in an
-SMC `.sm` model** (`transmitter/software/state_machine/brake_fsm.sm`), and the
-generated C (`brake_fsm_sm.[ch]`) is produced **at build time** by the
-[SMC State Machine Compiler](https://smc.sourceforge.net/) — a Java tool (`Smc.jar`)
-checked in under `tools/smc/`. The generated files are **never committed**; the `.sm`
-model is the single source of truth.
+Both of the transmitter's decision-making cores are written without ESP-IDF headers so
+they compile on the host: `can_decode.c` (DE-08) and `brake_fsm.c` (DE-09).
+`transmitter/software/test_host/` builds two harnesses against **the same sources the
+firmware compiles** — not copies — and two scripts check them against independent
+references:
 
-Wire it in as a **CMake pre-build step** so editing the model regenerates the code and
-the firmware target rebuilds:
+| Harness | Script | Asserts |
+|---------|--------|---------|
+| `trc_replay` | [`tools/golden_check.py`](../tools/golden_check.py) | every decoded signal matches **python-cantools** over a ride capture |
+| `fsm_replay` | [`tools/fsm_check.py`](../tools/fsm_check.py) | the FSM's state matches the **calibration bench** ([`tools/trc_viz.py`](../tools/trc_viz.py)) at every 50 Hz tick, and the derived acceleration agrees to 1e-3 mph/s |
 
-```cmake
-find_program(JAVA_EXECUTABLE java REQUIRED)
-set(SMC_JAR  "${CMAKE_SOURCE_DIR}/tools/smc/Smc.jar")
-set(FSM_SM   "${CMAKE_CURRENT_SOURCE_DIR}/state_machine/brake_fsm.sm")
-set(FSM_GEN  "${CMAKE_CURRENT_BINARY_DIR}/generated")
-
-add_custom_command(
-    OUTPUT  ${FSM_GEN}/brake_fsm_sm.c ${FSM_GEN}/brake_fsm_sm.h
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${FSM_GEN}
-    COMMAND ${JAVA_EXECUTABLE} -jar ${SMC_JAR} -c -d ${FSM_GEN} ${FSM_SM}
-    # optional: also emit a Graphviz diagram to keep the docs in sync
-    COMMAND ${JAVA_EXECUTABLE} -jar ${SMC_JAR} -graph -glevel 1 -d ${FSM_GEN} ${FSM_SM}
-    DEPENDS ${FSM_SM} ${SMC_JAR}
-    COMMENT "SMC: compiling brake_fsm.sm → brake_fsm_sm.[ch]"
-    VERBATIM)
-
-add_custom_target(brake_fsm_gen DEPENDS ${FSM_GEN}/brake_fsm_sm.c)
-# then: list ${FSM_GEN}/brake_fsm_sm.c in the component sources, add ${FSM_GEN} to the
-# include dirs, and add_dependencies(<component-lib> brake_fsm_gen).
+```bash
+cmake -S transmitter/software/test_host -B transmitter/software/test_host/build
+cmake --build transmitter/software/test_host/build
+pip install -r tools/requirements.txt
+python3 tools/golden_check.py && python3 tools/fsm_check.py
 ```
 
-Under ESP-IDF this lives in the relevant component's `CMakeLists.txt` (register the
-generated source, add the include dir, and `add_dependencies(${COMPONENT_LIB}
-brake_fsm_gen)`). The **host unit-test build** uses the same pre-build step, so the
-state machine is exercised off-target with synthetic signal/time sequences. Builders
-need a JRE on the build host; document it in the transmitter software README.
+Both run in CI on every push that touches the firmware, the profiles or the tools. The
+FSM check is what makes the duplication between the firmware and the bench viewer safe:
+they are allowed to be two implementations precisely because divergence fails the build.
+
+> An earlier revision of this document specified the braking FSM in an
+> [SMC](https://smc.sourceforge.net/) `.sm` model generated by a CMake pre-build step,
+> which would have required a JRE on every build host and in CI. That was dropped when
+> DE-09 was implemented; the rationale is in
+> [DE-09 §5](design/de-09-brake-decel-logic.md#5-firmware-moduletask-decomposition).

@@ -1,3 +1,12 @@
+# Pin defaults below are the as-built logger PCB map, taken from the exported
+# KiCad netlist of logger/hardware/logger.kicad_sch and tabulated in
+# logger/hardware/BRINGUP.md §0 — the transmitter is that same board (see
+# docs/hardware.md §1), so the two firmwares share the pin map verbatim. Do not
+# take pin numbers from the older logger_sch_revA.pdf or from
+# logger/hardware/README.md; both are stale.
+#
+# Ranges are 0..48 throughout: the ESP32-S3's GPIO range.
+
 menu "Transmitter configuration"
 
     config CHMBL_CLI
@@ -5,46 +14,83 @@ menu "Transmitter configuration"
         default y
         help
             Build the developer command-line shell (design element DE-00). It
-            runs over the console transport selected per target in
-            sdkconfig.defaults.<target> (USB Serial/JTAG on the ESP32-C3, UART
-            on the classic ESP32).
+            runs over the S3's native USB Serial/JTAG — this board has no UART
+            bridge, so that is the only console it has.
 
             Disable for production builds; the shell is then absent from the
-            image.
+            image. Everything else (CAN decode, the braking state machine, the
+            light output, the ESP-NOW link) comes up regardless.
 
-    config CHMBL_STATE_GPIO
-        int "Stand-in state-indicator GPIO number"
-        range 0 33
-        default 8 if IDF_TARGET_ESP32C3
-        default 2 if IDF_TARGET_ESP32
+    config CHMBL_BRAKE_LED_GPIO
+        int "Brake-light output GPIO number"
+        range 0 48
+        default 18
+        help
+            The braking state machine's output pin. On the logger PCB this
+            drives Q1 (2N7002K) through R3, low-side switching the remote
+            indicator LED on J4 pin2. High = lit (BRINGUP.md §7.2).
+
+            On a logger that pin is the operator's pod LED; on the transmitter
+            it is the BRAKE LIGHT, and on the bench — with J4 populated — that
+            pod LED is what stands in for the real rider-side light while the
+            ESP-NOW path is still being built out.
+
+    config CHMBL_LED_GREEN_GPIO
+        int "Onboard green LED (D5) GPIO number"
+        range 0 48
         default 2
         help
-            GPIO number (IOxx) lit by the `state` console command whenever the
-            stand-in braking output state is DECEL or BRAKE, until the real CAN
-            decode / state machine / ESP-NOW TX land.
+            D5, green, via R20. Active-high. Shows CAN bus liveness:
+            heartbeat = no traffic, inverted heartbeat = traffic present.
 
-            Defaults to the onboard LED of each target's reference dev board:
-            GPIO8 on the ESP32-C3-DevKitM/C, GPIO2 on the classic ESP32-DevKitC.
-            (On the classic ESP32 avoid GPIO6-11 — they are wired to the SPI
-            flash.) Set this to match the board you are bringing up.
+    config CHMBL_LED_RED_GPIO
+        int "Onboard red LED (D6) GPIO number"
+        range 0 48
+        default 1
+        help
+            D6, red, via R21. Active-high. Fault lamp: 2 Hz blink when the
+            transceiver silent pin reads low or TWAI fails to start; dark
+            otherwise.
 
     config CHMBL_CAN_TX_GPIO
-        int "TWAI (CAN) TX GPIO number"
-        range 0 33
-        default 4 if IDF_TARGET_ESP32C3
+        int "TWAI (CAN) TX GPIO number -> transceiver TXD"
+        range 0 48
         default 21
         help
-            GPIO wired to the CAN transceiver's TXD (SN65HVD230 D pin). The
-            controller runs in listen-only mode and never drives the bus
-            dominant, but the TWAI peripheral still requires a TX pin.
+            GPIO routed to the TWAI transmit signal, wired to U2 (TCAN330)
+            pin1 TXD; R15 pulls it up to 3V3. The controller runs listen-only
+            and never drives the bus dominant, but the TWAI peripheral still
+            claims this pin.
 
     config CHMBL_CAN_RX_GPIO
-        int "TWAI (CAN) RX GPIO number"
-        range 0 39
-        default 5 if IDF_TARGET_ESP32C3
-        default 22
+        int "TWAI (CAN) RX GPIO number <- transceiver RXD"
+        range 0 48
+        default 47
         help
-            GPIO wired to the CAN transceiver's RXD (SN65HVD230 R pin).
+            GPIO routed to the TWAI receive signal, wired from U2 (TCAN330)
+            pin4 RXD.
+
+    config CHMBL_CAN_SILENT_GPIO
+        int "CAN transceiver silent-mode (S) GPIO number"
+        range 0 48
+        default 35
+        help
+            The TCAN330's S (silent) pin, U2 pin8 — GPIO35, which is U1 pin 28.
+            (Easy to transpose: the schematic pin number is 28, the GPIO is 35.)
+
+            R16 (10K) pulls this net up to 3V3, and S high = silent: the
+            transceiver receives but its driver is disabled, so it cannot put a
+            dominant bit — not even an ACK — on the bus.
+
+            The firmware configures this pin as a HIGH-IMPEDANCE INPUT with both
+            internal pulls disabled and never drives it, so R16 alone holds the
+            transceiver silent. That makes silent mode the power-on default and
+            the failure-safe state: it holds through reset, through boot before
+            app_main runs, and through a firmware crash. This is the hardware
+            half of the project's golden rule (never disturb a live vehicle
+            bus); TWAI listen-only mode is the controller half. At boot the pin
+            is read back and a low reading is reported loudly and lights the
+            fault lamp.
 
     config CHMBL_NET_CHANNEL
         int "ESP-NOW Wi-Fi channel"
