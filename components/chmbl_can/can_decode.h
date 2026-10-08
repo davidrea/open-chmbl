@@ -21,11 +21,43 @@ extern "C" {
  * no frame carrying it arrives for this long. */
 #define CAN_DECODE_STALE_MS 1000u
 
-/* Acceleration derivation: slope of wheel speed over at least this window,
- * then exponentially smoothed (alpha = new-sample weight). */
+/* Acceleration derivation: low-pass the wheel speed, take the slope over at
+ * least ACCEL_WINDOW_MS, then exponentially smooth the slope (ALPHA = new-sample
+ * weight). */
 #define CAN_DECODE_ACCEL_WINDOW_MS 200u
 #define CAN_DECODE_ACCEL_ALPHA     0.3f
-#define CAN_DECODE_SPEED_HIST      16u
+
+/* Depth of the wheel-speed history ring the slope is taken across.
+ *
+ * SIZING RULE — do not shrink this without redoing the arithmetic:
+ *
+ *     CAN_DECODE_SPEED_HIST  >  CAN_DECODE_ACCEL_WINDOW_MS x frame_rate_hz
+ *
+ * accel_update() looks for the newest ring entry at least ACCEL_WINDOW_MS old.
+ * If the ring cannot hold that much history the search fails on every sample and
+ * the derived accel FREEZES at its last value, only ever updating across a rare
+ * frame gap — a silent failure, since the signal still looks plausible.
+ *
+ * The reference bus emits wheel speed (0x102) at ~100 Hz, so a 200 ms window
+ * needs > 20 samples. 32 spans ~320 ms at 100 Hz, which leaves 60% margin for a
+ * faster bus or a burstier scheduler. This was 16 (~150 ms) and was exactly the
+ * bug above — see docs/design/de-08-can-decode.md and the notes at the top of
+ * tools/trc_viz.py. */
+#define CAN_DECODE_SPEED_HIST      32u
+
+/* Single-pole low-pass applied to wheel speed BEFORE the slope is taken, as a
+ * time constant in ms (<= 0 disables it). Wheel speed is quantized to
+ * 0.0625 km/h (~0.039 mph) and the odd single-sample glitch gets through; both
+ * inject decel spikes into a 200 ms slope that the FSM would read as braking.
+ *
+ * This matches _smooth_speed() in tools/trc_viz.py, the tuned reference the
+ * DE-09 thresholds were calibrated against. It affects ONLY the derived accel
+ * path: sig.wheel_speed still carries the raw decoded sample, so the DE-08
+ * golden test against cantools is unaffected.
+ *
+ * Per-instance (can_decode_t.speed_smooth_ms) so an app can retune it from
+ * Kconfig — see CONFIG_BRAKE_FSM_SPEED_SMOOTH_MS. */
+#define CAN_DECODE_SPEED_SMOOTH_MS 80.0f
 
 #define KMH_TO_MPH 0.621371f
 
@@ -53,15 +85,27 @@ typedef struct {
     const bike_profile_t *profile;
     can_signals_t sig;
 
-    /* wheel-speed history ring for the accel slope */
+    /* wheel-speed history ring for the accel slope. Holds the LOW-PASSED
+     * samples (see CAN_DECODE_SPEED_SMOOTH_MS), not the raw ones. */
     float    spd_v[CAN_DECODE_SPEED_HIST];
     uint32_t spd_t[CAN_DECODE_SPEED_HIST];
     uint8_t  spd_head;
     uint8_t  spd_count;
     bool     accel_primed;
+
+    /* wheel-speed low-pass state (accel path only) */
+    float    speed_smooth_ms; /* time constant; <= 0 disables the filter */
+    float    spd_lpf;         /* filter output                          */
+    uint32_t spd_lpf_ms;      /* timestamp of the last filtered sample  */
+    bool     spd_lpf_primed;
 } can_decode_t;
 
 void can_decode_init(can_decode_t *d, const bike_profile_t *profile);
+
+/* Retune the wheel-speed low-pass time constant (ms; <= 0 disables it). Call
+ * right after can_decode_init(), before feeding frames — changing it mid-stream
+ * steps the filter output and therefore the derived accel. */
+void can_decode_set_speed_smooth_ms(can_decode_t *d, float tau_ms);
 
 /* Feed one received frame. Returns true if any profile signal was updated.
  * now_ms is a monotonic millisecond clock (wraparound-safe). */

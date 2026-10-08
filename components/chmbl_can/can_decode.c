@@ -2,6 +2,7 @@
 
 #include "can_decode.h"
 
+#include <math.h>
 #include <string.h>
 
 /* ---- bit-field extraction ---------------------------------------------- */
@@ -125,8 +126,43 @@ bool can_sig_valid(const sig_value_t *s, uint32_t now_ms)
 
 /* ---- derived acceleration ---------------------------------------------- */
 
-static void accel_update(can_decode_t *d, float speed_mph, uint32_t now_ms)
+/* Causal, dt-aware single-pole low-pass on wheel speed, applied before the
+ * slope is taken (CAN_DECODE_SPEED_SMOOTH_MS explains why). dt-aware rather
+ * than a fixed-alpha EMA because wheel-speed frame spacing is not constant:
+ * alpha = 1 - exp(-dt/tau) keeps the time constant honest when frames bunch up
+ * or a gap opens. Byte-for-byte the same recurrence as _smooth_speed() in
+ * tools/trc_viz.py, which is the tuned reference for the DE-09 thresholds. */
+static float speed_lpf(can_decode_t *d, float speed_mph, uint32_t now_ms)
 {
+    if (d->speed_smooth_ms <= 0.0f) {
+        return speed_mph;   /* filter disabled: raw samples feed the slope */
+    }
+    if (!d->spd_lpf_primed) {
+        d->spd_lpf = speed_mph;     /* seed on the first sample, no ramp-in */
+        d->spd_lpf_ms = now_ms;
+        d->spd_lpf_primed = true;
+        return d->spd_lpf;
+    }
+
+    const uint32_t dt_ms = now_ms - d->spd_lpf_ms;  /* wraparound-safe */
+    d->spd_lpf_ms = now_ms;
+
+    /* dt == 0 (two samples in the same millisecond) means "take the new value":
+     * expf(0) would give alpha 0 and discard the sample entirely. */
+    const float alpha = (dt_ms > 0u)
+        ? 1.0f - expf(-(float)dt_ms / d->speed_smooth_ms)
+        : 1.0f;
+    d->spd_lpf += alpha * (speed_mph - d->spd_lpf);
+    return d->spd_lpf;
+}
+
+static void accel_update(can_decode_t *d, float raw_speed_mph, uint32_t now_ms)
+{
+    /* Low-pass first; the ring, the slope and sig.accel are all derived from the
+     * filtered series. sig.wheel_speed keeps the raw sample (set by the caller),
+     * so the decoded signal the golden test checks is untouched. */
+    const float speed_mph = speed_lpf(d, raw_speed_mph, now_ms);
+
     /* push into the history ring */
     d->spd_v[d->spd_head] = speed_mph;
     d->spd_t[d->spd_head] = now_ms;
@@ -177,6 +213,12 @@ void can_decode_init(can_decode_t *d, const bike_profile_t *profile)
 {
     memset(d, 0, sizeof(*d));
     d->profile = profile;
+    d->speed_smooth_ms = CAN_DECODE_SPEED_SMOOTH_MS;
+}
+
+void can_decode_set_speed_smooth_ms(can_decode_t *d, float tau_ms)
+{
+    d->speed_smooth_ms = tau_ms;
 }
 
 bool can_decode_feed(can_decode_t *d, uint32_t can_id, const uint8_t *data,

@@ -234,12 +234,37 @@ with the braking signal.
 ## 4. Build & toolchain
 
 - **ESP-IDF** (recommended) per unit, or PlatformIO with the `espidf` framework.
-- Separate build per board: `transmitter/software/` and `brake_light/software/`.
+- Separate build per board: `transmitter/software/`, `brake_light/software/` and
+  `logger/software/`.
 - CI later: build both firmwares; unit-test the state machine and the profile
   decoder on host (they're pure functions — keep them platform-independent so they
   can be tested without hardware).
 
+### Shared components (`components/`)
+
+The pure cores more than one device needs are **real ESP-IDF components at the repo
+root**, compiled from one copy rather than duplicated or reached at across directories:
+
+```
+components/
+├── chmbl_can/     DE-08: bike_profile.h, the generated bike profile table, can_decode.[ch]
+└── brake_fsm/     DE-09: brake_fsm.[ch] + its tunables Kconfig
+```
+
+Each app's **top-level** `CMakeLists.txt` adds the directory to `EXTRA_COMPONENT_DIRS`
+before including `project.cmake`, and its `main` names what it needs in `PRIV_REQUIRES`.
+Nothing under `components/` includes an `esp_*.h` or `sdkconfig.h`, which is exactly
+what lets the host harnesses in `transmitter/software/test_host/` compile the same files
+with plain gcc. Details: [`components/README.md`](../components/README.md).
+
 ### State Machine Compiler (SMC) pre-build step
+
+> ⚠️ **Superseded for DE-09.** The braking state machine shipped as hand-written C in
+> `components/brake_fsm/`, ported from the already-tuned Python/JS reference, with no
+> SMC model and no JVM in the build or in CI. The reasoning is in
+> [`de-09-brake-decel-logic.md §5a`](design/de-09-brake-decel-logic.md#5a-architecture-decision--hand-written-c-ported-from-the-tuned-reference).
+> The recipe below is retained as a pattern for any future state machine large enough
+> to want generation.
 
 The transmitter's [braking state machine](#braking-state-machine) is **specified in an
 SMC `.sm` model** (`transmitter/software/state_machine/brake_fsm.sm`), and the

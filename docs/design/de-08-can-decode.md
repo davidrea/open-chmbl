@@ -65,6 +65,87 @@ Extended the `can_signal_t` descriptor from `docs/can-profiles.md §4` with
 `byte_order` (Intel/Motorola) and `is_signed`, since real DBCs need both;
 `can-profiles.md §4` has been updated to match.
 
+## 3b. Derived acceleration — two fixes that the FSM depends on
+
+The decoded *signals* were correct from the start (the golden test proves it against
+`cantools`). The **derived** `accel` was not, and because DE-09's rule 1 is driven
+entirely by it, the firmware FSM could not reproduce the behaviour the DE-09 thresholds
+were tuned to. Both faults were recorded in the comments at the top of
+[`tools/trc_viz.py`](../../tools/trc_viz.py), which is why the Python reference
+deliberately diverged from the firmware constants. Both are now fixed in
+`can_decode.[ch]`.
+
+**1. The wheel-speed history ring was too small to span the slope window.**
+`CAN_DECODE_SPEED_HIST` was **16**. Wheel speed (`0x102`) arrives at ~100 Hz, so 16
+samples span only ~150 ms — *less* than `CAN_DECODE_ACCEL_WINDOW_MS` (200 ms). The
+"oldest sample at least 200 ms back" search therefore failed on almost every sample and
+the derived acceleration **froze at its last value**, updating only across a rare frame
+gap. A silent failure: the signal still looked plausible.
+
+Now **32** (~320 ms at 100 Hz, ~60% margin). The header states the sizing rule
+explicitly —
+
+> `CAN_DECODE_SPEED_HIST > CAN_DECODE_ACCEL_WINDOW_MS × frame_rate_hz`
+
+— next to the constant, so widening the window or moving to a faster bus cannot silently
+regress it again.
+
+**2. There was no low-pass on wheel speed before the slope.** The tuned reference
+smooths speed with a single-pole, dt-aware filter (`speed_smooth_ms`, τ = **80 ms** —
+`_smooth_speed()` in `trc_viz.py`) *before* taking the slope; the firmware fed raw
+samples straight into `accel_update()`. Wheel speed is quantized to 0.0625 km/h
+(~0.039 mph) and the odd single-sample glitch gets through; one quantum inside a 200 ms
+window is ~0.19 mph/s, so raw samples inject decel spikes that rule 1 reads as braking.
+
+The same filter is now in `can_decode.c` (`speed_lpf()`, the identical recurrence
+`alpha = 1 − exp(−dt/τ)`), per-instance via `can_decode_set_speed_smooth_ms()` so an app
+can retune it from Kconfig (`CONFIG_BRAKE_FSM_SPEED_SMOOTH_MS`).
+
+**It affects only the derived accel path.** `sig.wheel_speed` still carries the raw
+decoded sample; the ring, the slope and `sig.accel` are the only things that see the
+filtered series. The DE-08 golden test compares *signal* values against `cantools` and
+is untouched by this — verified, still 183,944/183,944 exact.
+
+The existing exponential smoothing of the *slope* (`CAN_DECODE_ACCEL_ALPHA` = 0.3) is
+unchanged.
+
+**Why this mattered**, measured by the DE-09 replay test on the 40 mph ride log
+(reference: 29 transitions, 89.0 s of light-on):
+
+| Decode state | FSM transitions | Light on |
+|---|---:|---:|
+| ring 16, no LPF (as-was) | 12 | 53.3 s |
+| ring 32, no LPF | 37 | 89.7 s |
+| ring 32, LPF 80 ms (**as shipped**) | 29 | 90.6 s |
+
+Both fixes are needed: the ring size alone recovers the magnitude but leaves the signal
+twitchy enough for eight extra short `BRAKING` blips.
+
+## 3c. Promoted to a shared component
+
+The decode core moved out of `transmitter/software/main/` into a real shared ESP-IDF
+component, **[`components/chmbl_can/`](../../components/chmbl_can)**, because the
+[`logger/`](../../logger) firmware now needs it too (it runs the DE-09 preview on-board
+and gates recording on the decoded kill switch).
+
+| Was | Is |
+|-----|-----|
+| `transmitter/software/main/bike_profile.h` | `components/chmbl_can/bike_profile.h` |
+| `transmitter/software/main/bike_profiles.h` | `components/chmbl_can/bike_profiles.h` |
+| `transmitter/software/main/can_decode.[ch]` | `components/chmbl_can/can_decode.[ch]` |
+| `transmitter/software/main/bike_profile_triumph_tr.c` | `components/chmbl_can/bike_profile_triumph_tr.c` |
+
+Both apps add the repo-root `components/` directory to `EXTRA_COMPONENT_DIRS` in their
+top-level `CMakeLists.txt` and name `chmbl_can` in `PRIV_REQUIRES`, so the sources are
+compiled **once** rather than duplicated or reached at with `../../` source paths. The
+`#include "can_decode.h"` lines did not change. The component declares no ESP-IDF
+dependencies, which is what keeps the host harnesses compiling the same files with plain
+gcc. See [`components/README.md`](../../components/README.md).
+
+Downstream references updated with the move: the transmitter's `main/CMakeLists.txt`,
+the host harness CMake, the CI "generated profile is not stale" diff, and the `--out`
+path in `tools/gen_profile.py`'s usage.
+
 ## 4. I/O assignments & configuration
 - TWAI TX/RX pins, **listen-only mode**, bit rate (from DE-07), acceptance filter to
   profile IDs.
@@ -74,19 +155,26 @@ Extended the `can_signal_t` descriptor from `docs/can-profiles.md §4` with
 - `can_rx.c` — TWAI listen-only bring-up (bitrate + single-filter acceptance mask
   derived from the profile's IDs), RX task, source-aware (`can`/`fake`) signal
   snapshot consumed by `sig show` and (later) DE-09.
-- `can_decode.c`/`.h` — **pure, host-testable** profile decoder: generic bit
-  extractor (Intel/Motorola, signed/unsigned), `value = raw*scale + offset`,
-  per-signal staleness → validity, and the derived smoothed
-  `accel = d(wheel_speed)/dt` (mph/s). No ESP-IDF includes.
-- `bike_profile.h` / `bike_profiles.h` / `bike_profile_triumph_tr.c` — the
-  profile descriptor and the generated (committed) Triumph TR-series table
-  (§3a).
-- `cmd_can.c` / `cmd_sig.c` — CLI (§6).
+- `components/chmbl_can/can_decode.c`/`.h` — **pure, host-testable** profile decoder:
+  generic bit extractor (Intel/Motorola, signed/unsigned), `value = raw*scale + offset`,
+  per-signal staleness → validity, and the derived `accel = d(wheel_speed)/dt` (mph/s):
+  80 ms low-pass → ≥200 ms slope → α 0.3 smoothing (§3b). No ESP-IDF includes.
+- `components/chmbl_can/bike_profile.h` / `bike_profiles.h` /
+  `bike_profile_triumph_tr.c` — the profile descriptor and the generated (committed)
+  Triumph TR-series table (§3a). Shared component since §3c.
+- `cmd_can.c` / `cmd_sig.c` — CLI (§6), transmitter-side.
+- `logger/software/main/can_tap.[ch]` — the logger's instance of the decoder: fed every
+  received frame (recording or not) and snapshotted under a mutex for the DE-09 preview
+  and the automatic recording gate.
 - Host golden test: `transmitter/software/test_host/trc_replay.c` links
   `can_decode.c` + the generated profile outside ESP-IDF and replays
   `logger/40mph_drive_cycle.trc`; `tools/golden_check.py` diffs its output
   against `cantools` decoding the same capture through `profiles/triumph_tr.dbc`.
   Wired into CI as the `can-decode-golden` job.
+- Host derived-accel test: the DE-09 replay harness (`fsm_replay.c` /
+  `tools/fsm_check.py`, CI job `brake-fsm-replay`) is also the regression test for the
+  §3b accel derivation — the FSM is so sensitive to it that the two decode bugs show up
+  as a 59% error in brake-light on-time.
 
 ## 6. CLI hooks
 - `can show` — bit rate, driver state, frame/decode counters, dropped frames,
@@ -119,3 +207,10 @@ Extended the `can_signal_t` descriptor from `docs/can-profiles.md §4` with
 - The two `0x102` wheel-speed fields' front/rear assignment is still a
   suspected (not confirmed) mapping — see the decode notes in can-profiles.md
   §5; doesn't affect the FSM (front is the one wired up and used).
+- ~~Derived acceleration matches the offline reference.~~ **Resolved** — see §3b: the
+  ring was too small to span the slope window and the wheel-speed low-pass was missing.
+  Both fixed, and the DE-09 replay test now guards the derivation.
+- The accel derivation has **no automated test of its own** against `cantools` the way
+  the signals do (`cantools` does not derive acceleration). It is covered indirectly,
+  and sensitively, by the DE-09 replay test. If the accel path grows past a slope plus
+  two filters, give it a direct host test with synthetic speed series.

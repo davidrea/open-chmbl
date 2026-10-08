@@ -1,0 +1,144 @@
+# DE-09 braking state-machine tunables.
+#
+# These live with the component rather than with one app so the logger's
+# on-board preview and the transmitter's eventual DE-09 build are tuned from the
+# same menu with the same symbol names.
+#
+# UNITS: Kconfig has no float type, so every threshold is an INTEGER here and is
+# converted to float ONCE, at init, by the app glue that reads it
+# (logger/software/main/fsm_preview.c). The suffix names the unit:
+#
+#   _MMPH      milli-mph          (1000 = 1.00 mph)
+#   _MMPHPS    milli-mph/s        (2000 = 2.00 mph/s)
+#   _MS        milliseconds       (no scaling)
+#
+# Defaults are the values the Python/JS reference was tuned to on real ride logs
+# (BrakeTunables in tools/trc_viz.py). They are not arbitrary: changing one
+# changes a calibrated safety behaviour, so retune against the captures in
+# logger/ and re-run tools/fsm_check.py before trusting a new value.
+
+menu "Braking state machine (DE-09)"
+
+    config BRAKE_FSM_DECEL_ON_MMPHPS
+        int "Rule 1 — decel trigger (milli-mph/s)"
+        range 100 20000
+        default 2000
+        help
+            OFF -> BRAKING fires when the derived deceleration exceeds this,
+            held continuously for BRAKE_FSM_DECEL_ON_DEBOUNCE_MS.
+
+            2000 = 2.00 mph/s. Lower turns the light on for gentler slowing
+            (and on more throttle-off coasting); higher waits for harder
+            braking.
+
+    config BRAKE_FSM_DECEL_ON_DEBOUNCE_MS
+        int "Rule 1 — decel-on debounce (ms)"
+        range 0 2000
+        default 120
+        help
+            How long the decel threshold must hold CONTINUOUSLY before the
+            light turns on. Momentary throttle-off dips spike the wheel-speed
+            derivative and clear within a tick or two; this rejects them
+            without attenuating the signal (de-09 §4 explains why this is a
+            debounce and deliberately not extra low-pass filtering).
+
+            120 ms is the knee measured on the DE-07 40 mph ride log — larger
+            values started clipping real short brake taps.
+
+    config BRAKE_FSM_STOP_SPEED_MMPH
+        int "Rules 2/3 — stop speed (milli-mph)"
+        range 100 10000
+        default 1000
+        help
+            Below this the bike counts as stopped: OFF -> STOPPED (rule 2) and
+            BRAKING -> STOPPED (rule 3). Also the "rolling" qualifier on the
+            launch guard (rule 6b).
+
+            1000 = 1.00 mph.
+
+    config BRAKE_FSM_MOVING_SPEED_MMPH
+        int "Rule 6a — moving speed, STOPPED exit (milli-mph)"
+        range 100 20000
+        default 3000
+        help
+            STOPPED releases for motion only above this, giving low-speed
+            hysteresis against the rule-2 entry threshold. This is what makes
+            creep-in-traffic hold a steady light instead of strobing; on the
+            DE-07 40 mph log the gap cut FSM transitions 162 -> 48.
+
+            Must be greater than BRAKE_FSM_STOP_SPEED_MMPH. 3000 = 3.00 mph.
+
+    config BRAKE_FSM_ACCEL_OFF_MMPHPS
+        int "Rule 4 — accelerating-away threshold (milli-mph/s)"
+        range 100 20000
+        default 500
+        help
+            BRAKING -> OFF when acceleration exceeds this AND speed exceeds
+            BRAKE_FSM_ACCEL_OFF_MIN_SPEED_MMPH. 500 = 0.50 mph/s.
+
+    config BRAKE_FSM_ACCEL_OFF_MIN_SPEED_MMPH
+        int "Rule 4 — minimum speed qualifier (milli-mph)"
+        range 0 40000
+        default 5000
+        help
+            Rule 4 is ignored below this speed, so a twitch of positive
+            acceleration while nearly stopped cannot drop the light.
+            5000 = 5.00 mph.
+
+    config BRAKE_FSM_STEADY_BAND_MMPHPS
+        int "Rule 5 — steady-cruise band (milli-mph/s)"
+        range 100 20000
+        default 750
+        help
+            While BRAKING, |accel| inside this band counts as steady speed;
+            BRAKE_FSM_STEADY_TIMEOUT_MS of it releases the light.
+            750 = 0.75 mph/s.
+
+    config BRAKE_FSM_STEADY_TIMEOUT_MS
+        int "Rule 5 — steady-cruise timeout (ms)"
+        range 100 20000
+        default 1500
+        help
+            How long speed must stay inside the steady band before
+            BRAKING -> OFF. Covers braking that trails off into a cruise
+            without ever registering positive acceleration.
+
+    config BRAKE_FSM_STOP_TIMEOUT_MS
+        int "Rule 6c — long-stop timeout (ms)"
+        range 1000 600000
+        default 60000
+        help
+            STOPPED -> OFF after this long at a standstill: parked, not
+            waiting. The guard that covers a neutral stop, where the launch
+            guard (6b) can never be true.
+
+    config BRAKE_FSM_STATE_MIN_DWELL_MS
+        int "Anti-strobe minimum dwell (ms)"
+        range 0 2000
+        default 250
+        help
+            Global floor on how soon after a transition the next one may
+            happen. No single guard can strobe the light. DE-09 and
+            docs/safety-regulatory.md both require this; flashing brake lights
+            are illegal in many jurisdictions.
+
+            This is a floor, not a substitute for hysteresis — see the rule-6a
+            note in de-09-brake-decel-logic.md §4.
+
+    config BRAKE_FSM_SPEED_SMOOTH_MS
+        int "Wheel-speed low-pass before the slope (ms)"
+        range 0 1000
+        default 80
+        help
+            Time constant of the single-pole low-pass applied to wheel speed
+            BEFORE the acceleration slope is taken. 0 disables it.
+
+            Strictly this is a DE-08 decode-path value
+            (can_decode_set_speed_smooth_ms), but it is calibrated together
+            with the thresholds above and belongs to the same tuning set — it
+            is `speed_smooth_ms` in the reference's BrakeTunables.
+
+            It affects ONLY the derived acceleration. The decoded wheel-speed
+            signal stays raw, so the DE-08 golden test is unaffected.
+
+endmenu

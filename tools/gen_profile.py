@@ -12,7 +12,7 @@ Usage:
         --name "Triumph Speed 400 / Scrambler 400X (TR-series)" \
         --bitrate 500000 \
         --symbol bike_profile_triumph_tr \
-        --out transmitter/software/main/bike_profile_triumph_tr.c
+        --out components/chmbl_can/bike_profile_triumph_tr.c
 
 Regenerate and commit the output whenever the DBC changes; CI fails if the
 committed file is stale.

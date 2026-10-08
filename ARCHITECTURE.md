@@ -165,8 +165,11 @@ Design rationale:
 
 Full transition table, thresholds, and timing live in
 [`docs/firmware.md#braking-state-machine`](docs/firmware.md#braking-state-machine); the
-rationale and the SMC model are in
-[`docs/design/de-09-brake-decel-logic.md`](docs/design/de-09-brake-decel-logic.md).
+rationale, the shipped tunables and the implementation decisions are in
+[`docs/design/de-09-brake-decel-logic.md`](docs/design/de-09-brake-decel-logic.md). The
+machine itself is [`components/brake_fsm/`](components/brake_fsm), and it already runs
+on-device in the [`logger/`](logger) ride-validation build, which drives a panel-mount
+LED straight from its output.
 
 ---
 
@@ -232,6 +235,9 @@ open-chmbl/
 │   └── design/                ← per-element design docs (build one at a time)
 │       ├── README.md          ← process, template, design-element build order
 │       └── de-*.md            ← ESP-NOW, auto-brightness, link-loss, CAN, BRAKE/DECEL
+├── components/                ← shared ESP-IDF components (pure C, no IDF headers)
+│   ├── chmbl_can/             ← DE-08: bike profile + CAN decode
+│   └── brake_fsm/             ← DE-09: braking state machine
 ├── transmitter/               ← bike-side unit
 │   ├── hardware/              ← schematics, BOM, connector, enclosure
 │   └── software/              ← ESP32 firmware (TWAI listen-only + ESP-NOW TX)
@@ -240,10 +246,14 @@ open-chmbl/
     └── software/              ← ESP32 firmware (ESP-NOW RX + LED engine)
 ```
 
-Each unit and each `hardware/`/`software/` subdirectory has its own README. The
-shared protocol/profile/state definitions are referenced from both `software/`
-directories — see [`docs/roadmap.md`](docs/roadmap.md) for whether they become a
-real shared library or duplicated headers.
+Each unit and each `hardware/`/`software/` subdirectory has its own README.
+
+The shared profile/decode/state-machine code **is a real shared library**, resolving
+the open question [`docs/roadmap.md`](docs/roadmap.md) left: the platform-independent
+cores live in [`components/`](components/README.md) as ESP-IDF components that each app
+picks up through `EXTRA_COMPONENT_DIRS`, so they are compiled from one copy and
+host-testable off-target. (`protocol.h` is still a duplicated header on each side — it
+is a handful of enums and a struct, and the two apps are built separately.)
 
 ---
 
