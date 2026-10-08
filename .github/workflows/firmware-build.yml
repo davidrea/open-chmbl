@@ -62,6 +62,24 @@ jobs:
           target: ${{ matrix.target }}
           path: ${{ matrix.path }}
 
+  # DE-04 render correctness: the brake bar's state->binary-output map and its
+  # anti-strobe dwell floor are a pure function, so they are proved on the host
+  # with no ESP-IDF (see docs/design/de-04-led-render.md).
+  brake-light-render-host:
+    name: brake_light render core test (host)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and run the render-core test
+        run: |
+          cmake -S brake_light/software/test_host \
+            -B brake_light/software/test_host/build \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build brake_light/software/test_host/build
+          ./brake_light/software/test_host/build/render_core_test
+
   # DE-08 decode correctness: the committed generated profile must match the
   # DBC, and the C decoder must agree with python-cantools over the reference
   # ride capture (see docs/design/de-08-can-decode.md).

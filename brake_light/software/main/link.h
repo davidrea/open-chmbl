@@ -1,6 +1,5 @@
 /*
- * Link watchdog (DE-01 seq/timestamp + DE-03 placeholder failsafe) —
- * public entry points.
+ * Link watchdog (DE-01 seq/timestamp + DE-03 failsafe) — public entry points.
  */
 #pragma once
 
@@ -29,12 +28,12 @@ typedef struct {
     uint16_t      timeout_ms;
 } link_info_t;
 
-/* Starts the link watchdog task (~1000/CHMBL_LINK_BLINK_MS Hz): while the
- * link is up it mirrors the received braking state onto the stand-in brake
- * light; otherwise (waiting or lost) it blinks that same LED as a
- * link-loss placeholder, since there's no separate status-indicator LED
- * (DE-10) on the ESP32 DevKitC yet — see
- * docs/design/de-03-link-loss-failsafe.md. */
+/* Starts the link watchdog task (CONFIG_CHMBL_LINK_TICK_MS period, ~10 Hz).
+ * Each tick it publishes the effective braking state to the render stage —
+ * the received state while the link is up, ST_OFF (bar steady dark) while
+ * waiting or lost — and the link status to the status indicator, which
+ * carries the link-lost / waiting indication. It never blinks the brake bar;
+ * see docs/design/de-03-link-loss-failsafe.md. */
 void link_init(void);
 
 /* Called by net.c for each packet accepted from the paired peer. Drops

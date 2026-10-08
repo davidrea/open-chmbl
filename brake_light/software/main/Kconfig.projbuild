@@ -12,21 +12,129 @@ menu "Brake_light configuration"
             Disable for production builds; the shell is then absent from the
             image.
 
-    config CHMBL_LIGHT_GPIO
-        int "Stand-in brake-light GPIO number"
-        range 0 33
-        default 8 if IDF_TARGET_ESP32C3
+    comment "Brake bar (DE-04) — binary output, no brightness/PWM"
+
+    config CHMBL_BAR_EN_A_GPIO
+        int "Brake-bar string A driver enable GPIO (U3 CTRL)"
+        range -1 33
+        default 5 if IDF_TARGET_ESP32C3
         default 2 if IDF_TARGET_ESP32
         default 2
         help
-            GPIO number (IOxx) driving the stand-in brake light used by the
-            `light` console command, until the real LED render engine (DE-04)
-            lands.
+            GPIO (IOxx) driving the enable/CTRL pin of the first AP3019A boost
+            LED driver on the brake_light PCB. Active high: high = that string
+            lit at the current setpoint fixed by its 560 mohm sense resistor,
+            low = dark. This is a STATIC enable, not a PWM dimming input —
+            brightness/dimming is deferred, see
+            docs/design/de-04-led-render.md.
 
-            Defaults to the onboard LED of each target's reference dev board:
-            GPIO8 on the ESP32-C3-DevKitM/C, GPIO2 on the classic ESP32-DevKitC.
-            (On the classic ESP32 avoid GPIO6-11 — they are wired to the SPI
-            flash.) Set this to match the board you are bringing up.
+            PROVISIONAL on the ESP32-C3. U3's CTRL pad is NOT wired to the MCU
+            in the committed first-pass schematic/PCB (it reads as
+            "unconnected-(U3-CTRL-Pad4)" in the board netlist), so this
+            default is a firmware-side proposal pending a schematic review, not
+            a verified assignment. See brake_light/hardware/README.md for the
+            pin map and what was verified from the netlist.
+
+            Classic ESP32 (bench dev board) default GPIO2 = the onboard LED, so
+            the bar's on/off behaviour is observable on a DevKitC. On a
+            C3-DevKitM bench board set this to 8 for the same reason.
+
+            -1 = string not fitted (skip the pin entirely).
+
+    config CHMBL_BAR_EN_B_GPIO
+        int "Brake-bar string B driver enable GPIO (U6 CTRL)"
+        range -1 33
+        default 6 if IDF_TARGET_ESP32C3
+        default -1 if IDF_TARGET_ESP32
+        default -1
+        help
+            Same as CHMBL_BAR_EN_A_GPIO for the second AP3019A driver. The
+            ~8" bar is split into two series strings (10 emitters each on the
+            first-pass PCB); the firmware drives both enables together as one
+            logical output, so the bar never lights half-on.
+
+            PROVISIONAL on the ESP32-C3 for the same reason as string A: U6's
+            CTRL pad is unconnected in the committed board netlist.
+
+            Defaults to -1 (not fitted) on the classic ESP32 bench board,
+            which has only one stand-in LED.
+
+    config CHMBL_RENDER_TICK_MS
+        int "Render task period (ms)"
+        range 5 100
+        default 16
+        help
+            How often the render stage re-evaluates the effective state and
+            re-drives the bar (~60 Hz by default, per docs/firmware.md §2).
+            Also the granularity at which a change deferred by the anti-strobe
+            floor gets committed.
+
+    config CHMBL_RENDER_MIN_ON_MS
+        int "Anti-strobe: minimum bar ON time (ms)"
+        range 0 5000
+        default 600
+        help
+            Once the bar is lit it stays lit at least this long (BL-RND-2).
+            This is the floor that actually prevents a strobe, and it is safe
+            to make generous: holding a brake light on slightly too long is
+            honest, flashing it is both a safety and a regulatory problem
+            (docs/safety-regulatory.md §1).
+
+    config CHMBL_RENDER_MIN_OFF_MS
+        int "Anti-strobe: minimum bar OFF time (ms)"
+        range 0 2000
+        default 150
+        help
+            Once the bar is dark it stays dark at least this long before it may
+            relight. Kept small: this is the only floor that can delay a
+            brake-ON edge against the <= 100 ms end-to-end budget
+            (ARCHITECTURE.md §5), and it only bites if the bar went dark
+            moments ago.
+
+    comment "Status indicator (DE-10 slice) — separate from the bar"
+
+    config CHMBL_STATUS_LED_GRN_GPIO
+        int "Status LED GRN (D14) GPIO"
+        range -1 33
+        default 10 if IDF_TARGET_ESP32C3
+        default 5 if IDF_TARGET_ESP32
+        default -1
+        help
+            GPIO driving the green status LED D14 through R20 (100 ohm).
+            Active high (anode-fed, cathode on GND — this orientation IS
+            verified from the board netlist).
+
+            PROVISIONAL pin number on the ESP32-C3: R20's upper pad is
+            unconnected in the committed board netlist
+            ("unconnected-(R20-Pad1)"), so which GPIO drives it is not yet
+            decided in hardware.
+
+            -1 = not fitted.
+
+    config CHMBL_STATUS_LED_RED_GPIO
+        int "Status LED RED (D13) GPIO"
+        range -1 33
+        default 7 if IDF_TARGET_ESP32C3
+        default 4 if IDF_TARGET_ESP32
+        default -1
+        help
+            GPIO driving the red status LED D13 through R21 (100 ohm). Active
+            high. PROVISIONAL pin number for the same reason as the green LED
+            ("unconnected-(R21-Pad1)").
+
+            -1 = not fitted.
+
+    config CHMBL_STATUS_BLINK_MS
+        int "Status LED blink half-period (ms)"
+        range 150 2000
+        default 500
+        help
+            Half-period of the status indicator's slow blink (link WAITING =
+            green blink, link LOST = red blink). Floored well above a strobe
+            rate (BL-IND-4). This paces the *status LED only* — the brake bar
+            is never blinked.
+
+    comment "ESP-NOW link (DE-01 / DE-03)"
 
     config CHMBL_NET_CHANNEL
         int "ESP-NOW Wi-Fi channel"
@@ -51,19 +159,17 @@ menu "Brake_light configuration"
         default 300
         help
             No valid heartbeat for longer than this and the link watchdog
-            (DE-03 placeholder) declares the link lost. Protocol target is
-            <= 300 ms (docs/protocol.md §4).
+            (DE-03) declares the link lost. Protocol target is <= 300 ms
+            (docs/protocol.md §4).
 
-    config CHMBL_LINK_BLINK_MS
-        int "Link-lost/waiting blink half-period (ms)"
-        range 50 1000
-        default 250
+    config CHMBL_LINK_TICK_MS
+        int "Link watchdog tick (ms)"
+        range 20 500
+        default 100
         help
-            Placeholder link-loss indication: the single stand-in LED
-            blinks at this half-period instead of tracking the received
-            state, since there's no separate status-indicator LED on the
-            ESP32 DevKitC yet (see DE-10). The real distinct indication
-            (running light + fault blink, plus the status LED) lands with
-            DE-03/DE-10 once a second LED is available.
+            How often the link watchdog re-evaluates link health and
+            republishes the effective braking state to the render stage and
+            the link status to the indicator (~10 Hz by default, per
+            docs/firmware.md §2).
 
 endmenu

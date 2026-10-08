@@ -1,24 +1,34 @@
 /*
- * Link watchdog (DE-01 timestamping/counters + DE-03 placeholder failsafe).
+ * Link watchdog (DE-01 timestamping/counters + DE-03 failsafe).
  *
  * Owns sequence validation and last-rx timestamping for packets accepted
  * from the paired peer (net.c only checks sender identity) and, on a
  * timer, decides link status from the age of the last accepted packet.
- * While the link is up it mirrors the received braking state onto the
- * stand-in brake light (cmd_light.c); otherwise it blinks that same LED as
- * a link-lost/waiting placeholder. The real DE-03 visual (running light +
- * a distinct fault blink) and the DE-10 status indicator land once there's
- * a second LED to carry them.
+ *
+ * It then publishes, every tick:
+ *   - the *effective* braking state to the render stage (render.c) — the
+ *     received state while the link is up, and ST_OFF otherwise, so the bar
+ *     is held STEADY OFF when the link is lost or still waiting; and
+ *   - link health to the status indicator (status.c), which is where the
+ *     link-lost / waiting indication now lives.
+ *
+ * It no longer blinks the brake bar. With the bar a binary GPIO (high =
+ * braking, low = not braking) a blink would both contradict that contract
+ * and be a flashing brake light, which docs/safety-regulatory.md §1 forbids.
+ * DE-03's "never silently dark, never a latched fake BRAKE" is satisfied by
+ * the separate status LED plus `link show` on the console — see
+ * docs/design/de-03-link-loss-failsafe.md §9.
  */
-#include <string.h>
+#include <stddef.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
 #include "sdkconfig.h"
 
-#include "console.h"
 #include "link.h"
+#include "render.h"
+#include "status.h"
 
 static bool s_has_rx;
 static uint16_t s_last_seq;
@@ -50,23 +60,23 @@ static link_status_t compute_status(int64_t *age_ms_out)
 static void link_watchdog_task(void *arg)
 {
     (void)arg;
-    bool blink_phase = false;
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_CHMBL_LINK_BLINK_MS));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_CHMBL_LINK_TICK_MS));
 
         link_status_t status = compute_status(NULL);
-        if (status == LINK_UP) {
-            light_set(s_last_state != ST_OFF);
-        } else {
-            blink_phase = !blink_phase;
-            light_set(blink_phase);
-        }
+
+        /* Bar: the received state while up, steady OFF otherwise. Never a
+         * latched stale BRAKE, never a blink. */
+        render_set_state((status == LINK_UP) ? s_last_state : ST_OFF);
+
+        /* The honest "I don't know" indication lives on the status LED. */
+        status_set_link(status);
     }
 }
 
 void link_init(void)
 {
-    xTaskCreate(link_watchdog_task, "link_wd", 2048, NULL, 4, NULL);
+    xTaskCreate(link_watchdog_task, "link_wd", 2560, NULL, 4, NULL);
 }
 
 void link_on_rx(uint16_t seq, brake_state_t state)

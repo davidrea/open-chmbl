@@ -1,71 +1,82 @@
 /*
- * `light` command — drive the stand-in brake-light output.
+ * `light` command — bench override of the brake bar's binary output.
  *
- * Until the real LED pattern/render engine (DE-04) lands, the brake light is a
- * single GPIO so the console plumbing can be exercised on the bench:
+ *     light            show the override state and what the bar is doing
+ *     light on         force the bar on  (both driver EN pins high)
+ *     light off        force the bar off (both driver EN pins low)
+ *     light toggle     invert the forced output
+ *     light auto       release the override, back to the link-driven state
  *
- *     light            show current state
- *     light on         drive the pin high
- *     light off        drive the pin low
- *     light toggle     invert the pin
+ * This is how the bar gets exercised on the bench with no transmitter
+ * present. It does not poke the GPIOs itself: the render stage (render.c) is
+ * the single writer of the enable pins, so the override still goes through
+ * the anti-strobe dwell floor and cannot fight the link watchdog for the pin
+ * (which is what the old direct-GPIO version did — link.c overwrote it on
+ * its next tick). `render show` views the result; `light auto` hands the bar
+ * back to the link.
  *
- * light_set() is also the brake light's single physical output: the link
- * watchdog (link.c) drives it from the received state (or blinks it as a
- * link-loss placeholder), same as this CLI command does for bench testing.
+ * There is no brightness argument: the bar is binary (DE-04), and the LED
+ * current is fixed in hardware by the driver sense resistor.
  */
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 
-#include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_console.h"
-#include "esp_log.h"
 #include "sdkconfig.h"
 
 #include "console.h"
+#include "render.h"
 
-#define LIGHT_GPIO ((gpio_num_t)CONFIG_CHMBL_LIGHT_GPIO)
-
-static const char *TAG = "cmd_light";
-static bool s_light_on;
-
-void light_set(bool on)
+static void print_state(void)
 {
-    s_light_on = on;
-    gpio_set_level(LIGHT_GPIO, on ? 1 : 0);
-}
+    render_info_t info;
+    render_get_info(&info);
 
-/* GPIO bring-up, split out from cmd_light_register() so the physical output
- * exists regardless of whether the dev CLI (CONFIG_CHMBL_CLI) is built in —
- * the link watchdog (link.c) drives it unconditionally, same as the real
- * render engine will. */
-void light_init(void)
-{
-    gpio_reset_pin(LIGHT_GPIO);
-    gpio_set_direction(LIGHT_GPIO, GPIO_MODE_OUTPUT);
-    light_set(false);
-    ESP_LOGI(TAG, "stand-in brake light on GPIO%d", LIGHT_GPIO);
+    if (info.overridden) {
+        printf("light: override %s", info.override_out == BAR_ON ? "ON" : "OFF");
+    } else {
+        printf("light: auto (link-driven)");
+    }
+    printf(", bar is %s", info.out == BAR_ON ? "ON" : "OFF");
+    if (info.hold_ms) {
+        printf(" (anti-strobe hold %" PRIu32 " ms)", info.hold_ms);
+    }
+    printf("\n");
 }
 
 static int cmd_light(int argc, char **argv)
 {
     if (argc < 2) {
-        printf("light: GPIO%d is %s\n", LIGHT_GPIO, s_light_on ? "ON" : "OFF");
+        print_state();
         return 0;
     }
 
+    render_info_t info;
+    render_get_info(&info);
+
     const char *action = argv[1];
     if (strcmp(action, "on") == 0) {
-        light_set(true);
+        render_override(BAR_ON);
     } else if (strcmp(action, "off") == 0) {
-        light_set(false);
+        render_override(BAR_OFF);
     } else if (strcmp(action, "toggle") == 0) {
-        light_set(!s_light_on);
+        /* Toggle what the bar is actually showing, so `light toggle` works
+         * as the first command too (from auto mode). */
+        render_override(info.out == BAR_ON ? BAR_OFF : BAR_ON);
+    } else if (strcmp(action, "auto") == 0) {
+        render_override_clear();
     } else {
-        printf("usage: light [on|off|toggle]\n");
+        printf("usage: light [on|off|toggle|auto]\n");
         return 1;
     }
 
-    printf("light: GPIO%d is now %s\n", LIGHT_GPIO, s_light_on ? "ON" : "OFF");
+    /* The render task is the only writer of the pins, so give it a couple of
+     * ticks to act before reporting what the bar is actually doing. */
+    vTaskDelay(pdMS_TO_TICKS(2 * CONFIG_CHMBL_RENDER_TICK_MS));
+    print_state();
     return 0;
 }
 
@@ -73,8 +84,8 @@ void cmd_light_register(void)
 {
     const esp_console_cmd_t cmd = {
         .command = "light",
-        .help = "Drive the stand-in brake-light GPIO: light [on|off|toggle]",
-        .hint = "[on|off|toggle]",
+        .help = "Bench override of the brake bar: light [on|off|toggle|auto]",
+        .hint = "[on|off|toggle|auto]",
         .func = &cmd_light,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
