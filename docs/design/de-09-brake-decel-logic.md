@@ -93,7 +93,8 @@ protocol — see [protocol.md](../protocol.md).)
         │  (light on)    │                               │        (light on)          │
         └───────┬───────┘                               └─────────────┬──────────────┘
                 │  accel > ACCEL_OFF & speed > 5                       │ speed > MOVING_SPEED
-                │  OR steady |accel| < band for STEADY_TIMEOUT         │ OR (clutch released in gear & rolling)
+                │  OR decel < DECEL_OFF for DECEL_OFF_HOLD & speed > 5 │ OR (clutch released in gear & rolling)
+                │  OR steady |accel| < band for STEADY_TIMEOUT         │
                 ▼                                                      │ OR stopped > STOP_TIMEOUT
                OFF ◀──────────────────────────────────────────────────┘
 ```
@@ -106,6 +107,7 @@ protocol — see [protocol.md](../protocol.md).)
 | `OFF` | `speed_mph` < `stop_speed_mph` | `STOPPED` | 2 — turn on when settling to a stop |
 | `BRAKING` | `speed_mph` < `stop_speed_mph` | `STOPPED` | 3 — keep on through the stop |
 | `BRAKING` | acceleration > `accel_off_mphps` **and** `speed_mph` > `accel_off_min_speed_mph` | `OFF` | 4 — accelerating away |
+| `BRAKING` | deceleration < `decel_off_mphps` for `decel_off_hold_ms` **and** `speed_mph` > `accel_off_min_speed_mph` | `OFF` | 4b — braking eased off |
 | `BRAKING` | \|accel\| < `steady_band_mphps` for `steady_timeout_ms` | `OFF` | 5 — steady cruise after braking |
 | `STOPPED` | `speed_mph` > `moving_speed_mph` | `OFF` | 6a — moving away from the stop (hysteresis) |
 | `STOPPED` | clutch released **and** in gear (not neutral) **and** `speed_mph` > `stop_speed_mph` | `OFF` | 6b — launching |
@@ -126,15 +128,34 @@ Notes:
   genuinely oscillate across a single threshold, so the fix is hysteresis, not
   rate-limiting.
 - **Decel-on debounce (rule 1).** The `OFF → BRAKING` trigger requires
-  `decel > decel_on_mphps` to hold **continuously** for `decel_on_debounce_ms` (120 ms).
+  `decel > decel_on_mphps` to hold **continuously** for `decel_on_debounce_ms` (160 ms
+  since the on-road retune below; 120 ms when this note was written).
   Momentary throttle-off dips spike the wheel-speed derivative past the threshold and
   clear within a tick or two; the debounce rejects them **without attenuating the
   signal**. This is deliberately a debounce and **not** a heavier low-pass filter: extra
   smoothing would suppress the same spikes only by delaying genuine hard-braking onset,
-  which is the wrong trade for a safety light. Sustained braking still fires ≤ 120 ms
+  which is the wrong trade for a safety light. Sustained braking still fires ≤ 160 ms
   later. On the [DE-07 40 mph ride log] it removed the last momentary `BRAKING` blips
   (8 → 3, transitions 48 → 30) at ~unchanged on-time; larger values began clipping real
   short brake taps, so 120 ms is the knee.
+- **Braking eased off (rule 4b).** Without it, `BRAKING` only ended on positive
+  acceleration (rule 4) or a near-zero steady band (rule 5), so a long gentle slowdown
+  kept the light on well after the rider had let go of the brake. Rule 4b turns it off
+  once deceleration has stayed milder than `decel_off_mphps` (1.0) for
+  `decel_off_hold_ms` (400 ms). That gives hysteresis against `decel_on_mphps` (2.5): the
+  light comes on above 2.5 mph/s and goes off below 1.0. Like rule 4 it applies only
+  above `accel_off_min_speed_mph`, so easing off in the last few mph before a stop never
+  darkens the light. That case runs on through rule 3. With the defaults, rule 4b
+  always fires before rule 5, which stays as a backstop for anyone who tunes 4b out.
+- **On-road retune (2026-10-18).** The first ride behind the live light found it too
+  eager to come on under gradual decel and too slow to let go. Over the seven ride
+  captures in `logger/` (96 min), raising `decel_on_mphps` 2.0 → 2.5 and
+  `decel_on_debounce_ms` 120 → 160, and adding rule 4b, changed these:
+  BRAKING episodes peaking under 3 mph/s (the gradual ones) went 59 → 8, and lit time
+  went 27.5 % → 22.1 %. The share of `BRAKING` time spent at decel milder than 1.5 mph/s
+  fell from 29 % to 14 %. Every sustained hard brake (> 4 mph/s for ≥ 100 ms, 258 of
+  them) still lit within 120 ms of onset. In no case did the light go off and then
+  re-light into `STOPPED` within 3 s.
 - **Stop-and-go:** creeping *past* `moving_speed_mph` drops `STOPPED → OFF`; the next
   gentle slowdown re-enters via rule 1/2. Sustained slow creep below the hysteresis band
   now holds the light rather than blinking.
@@ -147,19 +168,22 @@ Notes:
 ### Tunables
 
 Defaults as shipped in `brake_fsm.h` (`BRAKE_TUNABLES_DEFAULT`), calibrated on the DE-07
-ride logs through [`tools/trc_viz.html`](../../tools/trc_viz.html). Speeds in MPH,
+ride logs through [`tools/trc_viz.html`](../../tools/trc_viz.html) and retuned after the
+first on-road ride (see the note above). Speeds in MPH,
 accelerations in MPH/s. All are settable live with `state tune <name> <value>`, over the
 same ranges as the bench viewer's sliders — except `decel_on_debounce_ms`, whose minimum
 is one tick rather than zero, because a zero debounce degenerates into "on every tick".
 
 | Tunable | Default | Purpose |
 |---------|--------:|---------|
-| `decel_on_mphps` | 2.0 | Deceleration that turns the light **on** (rule 1). |
-| `decel_on_debounce_ms` | 120 | ...held this long first. |
+| `decel_on_mphps` | 2.5 | Deceleration that turns the light **on** (rule 1). |
+| `decel_on_debounce_ms` | 160 | ...held this long first. |
 | `stop_speed_mph` | 1.0 | At/under = "stopped" (rules 2/3, rolling qualifier in 6b). |
 | `moving_speed_mph` | 3.0 | Must be exceeded to leave `STOPPED` for motion (rule 6a). |
 | `accel_off_mphps` | 0.5 | Acceleration that turns the light **off** (rule 4). |
-| `accel_off_min_speed_mph` | 5.0 | ...only above this speed. |
+| `accel_off_min_speed_mph` | 5.0 | ...only above this speed (rules 4 and 4b). |
+| `decel_off_mphps` | 1.0 | Deceleration milder than this counts as "eased off" (rule 4b). Keep it below `decel_on_mphps`. |
+| `decel_off_hold_ms` | 400 | ...held this long before turning off. |
 | `steady_band_mphps` | 0.75 | \|accel\| under this counts as "steady" (rule 5). |
 | `steady_timeout_ms` | 1500 | Steady-after-braking hold before turning off. |
 | `stop_timeout_ms` | 60000 | Max on-time while stopped (rule 6c). |
@@ -199,7 +223,9 @@ is one tick rather than zero, because a zero debounce degenerates into "on every
   gentle coast-to-stop → `STOPPED` via rule 2; reaching 0 from `BRAKING` → `STOPPED`
   (stays on).
 - From `BRAKING`: a positive accel ramp above threshold (speed > 5 mph) → `OFF` (rule
-  4); a held-steady speed → `OFF` after `steady_timeout_ms` (rule 5).
+  4); decel easing under `decel_off_mphps` while still slowing → `OFF` after
+  `decel_off_hold_ms` (rule 4b); a held-steady speed → `OFF` (rule 4b, with rule 5
+  behind it).
 - From `STOPPED`: pulling away (speed > `moving_speed_mph`) → `OFF`; clutch released in
   gear **while rolling** (speed > `stop_speed_mph`) → `OFF`; neutral-with-clutch-out does
   **not** turn off until the `stop_timeout_ms` expires; the 60 s timeout fires.
@@ -222,9 +248,9 @@ is one tick rather than zero, because a zero debounce degenerates into "on every
   the real light.
 - ~~Confirm `gear`/`neutral` and `wheel_speed` are actually decodable on the reference
   bus.~~ **Resolved in DE-07:** all present and decoded (see the golden test).
-- **Not yet validated on the bike.** Every number above comes from replaying captures.
-  The first on-road run with the light live is the real test, and the thing most likely
-  to move is `decel_on_mphps`.
+- **First on-road run done (2026-10-18).** The light was responsive. It led to the
+  retune and rule 4b above. Those new values come from replaying captures and still need
+  a ride behind the light to confirm them.
 - ~~Stop-and-go flicker policy (a `STOPPED`→`OFF` hold/hysteresis vs. the literal
   rules).~~ **Resolved:** added `moving_speed_mph` hysteresis on the `STOPPED` exit +
   a rolling qualifier on the launch guard (see [§4 note](#4-state-machine)); validated on

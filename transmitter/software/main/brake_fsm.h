@@ -36,14 +36,18 @@ typedef enum {
 } brake_fsm_state_t;
 
 /* Speeds in mph, accelerations in mph/s, times in ms. Defaults are the
- * trc_viz.html values, calibrated on the DE-07 ride logs. */
+ * trc_viz.html values, calibrated on the DE-07 ride logs and retuned after
+ * the first ride behind the live light (DE-09 §4). */
 typedef struct {
     float    decel_on_mphps;          /* decel that turns the light on      */
     uint16_t decel_on_debounce_ms;    /* ... held this long first           */
     float    stop_speed_mph;          /* at/under = stopped                 */
     float    moving_speed_mph;        /* must be exceeded to leave STOPPED  */
     float    accel_off_mphps;         /* accel that turns the light off     */
-    float    accel_off_min_speed_mph; /* ... only above this speed          */
+    float    accel_off_min_speed_mph; /* ... (and eased-off) only above this
+                                         speed                              */
+    float    decel_off_mphps;         /* decel eased under this = let go    */
+    uint16_t decel_off_hold_ms;       /* ... held this long, then off       */
     float    steady_band_mphps;       /* |accel| under this = steady        */
     uint16_t steady_timeout_ms;       /* steady-after-braking hold          */
     uint32_t stop_timeout_ms;         /* max on-time while stopped          */
@@ -56,12 +60,14 @@ typedef struct {
 
 #define BRAKE_TUNABLES_DEFAULT                  \
     ((brake_tunables_t){                        \
-        .decel_on_mphps          = 2.0f,        \
-        .decel_on_debounce_ms    = 120,         \
+        .decel_on_mphps          = 2.5f,        \
+        .decel_on_debounce_ms    = 160,         \
         .stop_speed_mph          = 1.0f,        \
         .moving_speed_mph        = 3.0f,        \
         .accel_off_mphps         = 0.5f,        \
         .accel_off_min_speed_mph = 5.0f,        \
+        .decel_off_mphps         = 1.0f,        \
+        .decel_off_hold_ms       = 400,         \
         .steady_band_mphps       = 0.75f,       \
         .steady_timeout_ms       = 1500,        \
         .stop_timeout_ms         = 60000,       \
@@ -87,6 +93,7 @@ typedef struct {
     brake_fsm_state_t state;
     uint32_t since_ms;       /* since the last transition (anti-strobe floor) */
     uint32_t decel_hold_ms;  /* decel has exceeded the threshold this long    */
+    uint32_t eased_hold_ms;  /* decel has stayed under decel_off this long    */
     uint32_t steady_hold_ms; /* |accel| has been inside the band this long    */
     uint32_t stopped_hold_ms;/* time spent in STOPPED                         */
     uint32_t transitions;    /* lifetime count, for `state show` / the bench  */
