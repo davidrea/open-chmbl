@@ -94,27 +94,37 @@ oscillate, so the fix is hysteresis, not just rate-limiting.
 
 **Decel-on debounce (momentary-dip rejection).** The `OFF → BRAKING` trigger requires
 `deceleration > DECEL_ON_MPHPS` to hold **continuously** for `DECEL_ON_DEBOUNCE_MS`
-(120 ms) before the light comes on. Momentary throttle-off dips briefly spike the
+(160 ms) before the light comes on. Momentary throttle-off dips briefly spike the
 wheel-speed derivative past the threshold and clear within a tick or two; the debounce
 rejects those without attenuating the signal (unlike heavier low-pass smoothing, which
 would suppress the spikes only by **delaying genuine hard-braking onset** — the wrong
-trade for a brake light). A sustained decel still fires, just ≤ 120 ms later. On the
+trade for a brake light). A sustained decel still fires, just ≤ 160 ms later. On the
 [DE-07 ride log](can-profiles.md#decode-table) this removed the remaining sub-0.5 s
 `BRAKING` blips (8 → 3, and total transitions 48 → 30) with on-time essentially
-unchanged; larger debounce values started clipping real short brake taps, so 120 ms is
-the knee. This is a **debounce, not a low-pass filter** — chosen precisely to keep
+unchanged; larger debounce values started clipping real short brake taps, so 120 ms was
+the knee. The first on-road ride moved it to 160 ms, alongside a higher on-threshold and
+the eased-off rule below. See
+[DE-09 §4](design/de-09-brake-decel-logic.md#4-state-machine) for the data.
+
+**Braking eased off.** `BRAKING` also ends once deceleration has stayed milder than
+`DECEL_OFF_MPHPS` for `DECEL_OFF_HOLD_MS` while moving above
+`ACCEL_OFF_MIN_SPEED_MPH`. A long gentle slowdown no longer holds the light on until
+the bike starts accelerating again, and the light still stays on through the last few
+mph into a stop. This is a **debounce, not a low-pass filter** — chosen precisely to keep
 braking-onset latency bounded and predictable.
 
 **Tunables (defaults — speeds in MPH, accelerations in MPH/s; calibrate on DE-07 logs):**
 
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
-| `decel_on_mphps` | 2.0 | Deceleration that turns the light **on**. |
-| `decel_on_debounce_ms` | 120 | Decel must exceed `decel_on_mphps` this long before `BRAKING` (rejects momentary dips). |
+| `decel_on_mphps` | 2.5 | Deceleration that turns the light **on**. |
+| `decel_on_debounce_ms` | 160 | Decel must exceed `decel_on_mphps` this long before `BRAKING` (rejects momentary dips). |
 | `stop_speed_mph` | 1.0 | At/under = "stopped" (enter `STOPPED`). |
 | `moving_speed_mph` | 3.0 | Must be exceeded to leave `STOPPED` for motion (hysteresis; > `stop_speed_mph`). |
 | `accel_off_mphps` | 0.5 | Acceleration that turns the light **off** while moving. |
-| `accel_off_min_speed_mph` | 5.0 | Only honor the accel-off rule above this speed. |
+| `accel_off_min_speed_mph` | 5.0 | Only honor the accel-off and eased-off rules above this speed. |
+| `decel_off_mphps` | 1.0 | Deceleration milder than this counts as "eased off" (keep below `decel_on_mphps`). |
+| `decel_off_hold_ms` | 400 | Eased-off hold before turning off. |
 | `steady_band_mphps` | 0.75 | \|accel\| under this counts as "steady". |
 | `steady_timeout_ms` | 1500 | Steady-after-decel hold before turning off. |
 | `stop_timeout_ms` | 60000 | Max on-time while stopped. |
@@ -144,12 +154,14 @@ typedef struct {
     bool   has_gear_signal;          // false → neutral-aware exits degrade to timeout only
     uint8_t tx_rate_hz;              // 20..50
     // Braking FSM tunables (see table above)
-    float    decel_on_mphps;         // 2.0
-    uint16_t decel_on_debounce_ms;   // 120  (reject momentary decel dips)
+    float    decel_on_mphps;         // 2.5
+    uint16_t decel_on_debounce_ms;   // 160  (reject momentary decel dips)
     float    stop_speed_mph;         // 1.0  (enter STOPPED)
     float    moving_speed_mph;       // 3.0  (exit STOPPED; hysteresis)
     float    accel_off_mphps;        // 0.5
-    float    accel_off_min_speed_mph;// 5.0
+    float    accel_off_min_speed_mph;// 5.0  (also gates the eased-off rule)
+    float    decel_off_mphps;        // 1.0  (decel eased under this...)
+    uint16_t decel_off_hold_ms;      // 400  (...this long → off)
     float    steady_band_mphps;      // 0.75
     uint16_t steady_timeout_ms;      // 1500
     uint32_t stop_timeout_ms;        // 60000

@@ -106,3 +106,8 @@ jobs:
 
       - name: DE-09 state-machine parity vs the reference
         run: python3 tools/fsm_check.py
+
+      # Ride-logging gate: when the transmitter opens and closes a .trc file
+      # from the engine cutoff switch. Self-checking; non-zero exit fails.
+      - name: Ride-logging gate unit test
+        run: ./transmitter/software/test_host/build/log_gate_test

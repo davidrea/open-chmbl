@@ -1,6 +1,7 @@
 # Host-side tests for the firmware's pure cores (no ESP-IDF):
-#   trc_replay  DE-08 decode  -> tools/golden_check.py (compares to cantools)
-#   fsm_replay  DE-09 FSM     -> tools/fsm_check.py    (compares to trc_viz.py)
+#   trc_replay     DE-08 decode  -> tools/golden_check.py (compares to cantools)
+#   fsm_replay     DE-09 FSM     -> tools/fsm_check.py    (compares to trc_viz.py)
+#   log_gate_test  ride-logging gate (kill switch) — self-checking, run directly
 # Build:  cmake -B build && cmake --build build
 cmake_minimum_required(VERSION 3.16)
 project(can_decode_host_test C)
@@ -22,3 +23,8 @@ add_executable(fsm_replay
     ../main/bike_profile_triumph_tr.c)
 target_include_directories(fsm_replay PRIVATE ../main)
 target_link_libraries(fsm_replay m)
+
+add_executable(log_gate_test
+    log_gate_test.c
+    ../main/log_gate.c)
+target_include_directories(log_gate_test PRIVATE ../main)

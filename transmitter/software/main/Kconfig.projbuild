@@ -49,8 +49,9 @@ menu "Transmitter configuration"
         default 1
         help
             D6, red, via R21. Active-high. Fault lamp: 2 Hz blink when the
-            transceiver silent pin reads low or TWAI fails to start; dark
-            otherwise.
+            transceiver silent pin reads low, TWAI fails to start, or (with
+            ride logging) a microSD card is present but can't be mounted or
+            written; dark otherwise.
 
     config CHMBL_CAN_TX_GPIO
         int "TWAI (CAN) TX GPIO number -> transceiver TXD"
@@ -116,5 +117,135 @@ menu "Transmitter configuration"
         help
             How long `pair start` broadcasts/listens for a peer before
             giving up.
+
+    menu "Ride logging (microSD)"
+
+        config CHMBL_TRC_LOG
+            bool "Record CAN to microSD while the kill switch is in RUN"
+            default y
+            help
+                Ride-validation logging: capture ALL CAN traffic to the
+                microSD (J5) as PCAN .trc files, the same format the logger
+                firmware writes, alongside the brake light on IO18 — so one
+                ride produces both the light's behaviour and the trace that
+                explains it.
+
+                Recording is automatic and silent, gated on the decoded
+                engine_cutoff signal (CAN 0x121): a new N.trc opens whenever
+                the switch is seen in RUN with no capture in progress (key on
+                in RUN, or CUTOFF -> RUN), and closes on CUTOFF or when the
+                bus goes quiet (see CHMBL_TRC_LOG_CLOSE_MS). There is no
+                recording indicator; only faults light D6.
+
+                Costs: the TWAI acceptance filter is opened to accept every
+                ID (a log behind the decode filter would be silently
+                incomplete), and ~24 KB of RAM for the frame queue plus a
+                32 KB write buffer per open file.
+
+                With no card in J5 — as on a production transmitter, which
+                leaves J5 unpopulated — this is inert apart from those costs.
+                Say N to remove it from the image entirely.
+
+        config CHMBL_TRC_LOG_CLOSE_MS
+            int "Close the capture after this long without engine_cutoff (ms)"
+            range 1500 60000
+            default 3000
+            depends on CHMBL_TRC_LOG
+            help
+                Key-off looks like the bus going quiet. Once engine_cutoff
+                has gone unseen for this long, the open file is closed.
+
+                Must exceed the decoder's 1000 ms staleness window
+                (CAN_DECODE_STALE_MS): between the two, a capture in progress
+                is HELD, so a brief bus dropout keeps writing to the same file
+                instead of splitting the ride in two. A capture is never
+                started from a stale reading.
+
+        config CHMBL_TRC_LOG_SYNC_MS
+            int "Commit buffered data to the card every (ms)"
+            range 250 60000
+            default 2000
+            depends on CHMBL_TRC_LOG
+            help
+                Periodic fflush + fsync of the open file. The bike can drop
+                12 V at any moment with a file open, and there is no button
+                press to end a capture cleanly. FAT only records a file's
+                length in its directory entry at sync or close, so without
+                this a power cut leaves a capture that reads as empty even
+                though its clusters were written. This bounds the loss to the
+                last interval.
+
+        config CHMBL_TRC_LOG_QUEUE_LEN
+            int "RX-to-writer frame queue depth"
+            range 64 8192
+            default 1024
+            depends on CHMBL_TRC_LOG
+            help
+                Frames buffered between the CAN-RX task and the microSD
+                writer. 1024 frames is ~0.7 s at the ~1500 frames/s peaks seen
+                on the reference bus — enough to ride out an SD write stall.
+                Overflows are counted and recorded in each file's footer.
+
+        config CHMBL_SD_DET_GPIO
+            int "microSD card-detect (DET_A) GPIO number"
+            range 0 48
+            default 8
+            depends on CHMBL_TRC_LOG
+            help
+                J5 pin10, active-low; R17 pulls it up (no internal pull-up is
+                enabled, so an unstuffed R17 shows up rather than being
+                masked). BRINGUP.md §0.
+
+        config CHMBL_SD_CLK_GPIO
+            int "SDMMC CLK GPIO number"
+            range 0 48
+            default 9
+            depends on CHMBL_TRC_LOG
+
+        config CHMBL_SD_CMD_GPIO
+            int "SDMMC CMD GPIO number"
+            range 0 48
+            default 10
+            depends on CHMBL_TRC_LOG
+
+        config CHMBL_SD_D0_GPIO
+            int "SDMMC DAT0 GPIO number"
+            range 0 48
+            default 48
+            depends on CHMBL_TRC_LOG
+
+        config CHMBL_SD_D1_GPIO
+            int "SDMMC DAT1 GPIO number"
+            range 0 48
+            default 17
+            depends on CHMBL_TRC_LOG
+
+        config CHMBL_SD_D2_GPIO
+            int "SDMMC DAT2 GPIO number"
+            range 0 48
+            default 12
+            depends on CHMBL_TRC_LOG
+
+        config CHMBL_SD_D3_GPIO
+            int "SDMMC DAT3 GPIO number"
+            range 0 48
+            default 11
+            depends on CHMBL_TRC_LOG
+
+        choice CHMBL_SD_BUS_WIDTH
+            prompt "SDMMC bus width"
+            default CHMBL_SD_BUS_WIDTH_4
+            depends on CHMBL_TRC_LOG
+            help
+                The logger PCB routes all four data lines. 1-bit is a
+                bring-up fallback if DAT1-3 misbehave.
+
+            config CHMBL_SD_BUS_WIDTH_1
+                bool "1-bit"
+            config CHMBL_SD_BUS_WIDTH_4
+                bool "4-bit"
+        endchoice
+
+    endmenu
 
 endmenu

@@ -13,15 +13,18 @@ and, in the final build, the remote pod connector (J4) left unpopulated — see
 > version, see the history before the port.
 
 Responsibilities:
-- **TWAI (CAN 2.0)** in **listen-only** mode, filtered to the
-  [bike profile](../../docs/can-profiles.md) IDs, with the transceiver held silent in
-  hardware (below).
+- **TWAI (CAN 2.0)** in **listen-only** mode, with the transceiver held silent in
+  hardware (below). Filtered in hardware to the
+  [bike profile](../../docs/can-profiles.md) IDs — or open to every ID when ride logging
+  is built in, since a capture has to be complete.
 - Decode `wheel_speed`, `throttle_pct`, `rpm`, `clutch_pulled`, `gear`/`neutral`
   ([DE-08](../../docs/design/de-08-can-decode.md)) and derive acceleration from wheel
   speed. The reference bus carries **no brake-switch bit**.
 - Run the [braking state machine](../../docs/design/de-09-brake-decel-logic.md) at
   50 Hz and drive the **brake-light output**.
 - Broadcast the resulting state over [ESP-NOW](../../docs/protocol.md) at 20–50 Hz.
+- **Ride logging** (ride validation): record the whole bus to microSD while the kill
+  switch is in RUN — [below](#ride-logging).
 
 ## The brake light, right now
 
@@ -31,6 +34,50 @@ is the brake light under test**: it lights exactly when the FSM says BRAKING or 
 with no pattern of its own, so what you see on the bench is the decision the radio will
 eventually carry. The same state already goes out over ESP-NOW (`net show`), so pointing
 it at a real rider-side light later changes nothing in this firmware.
+
+## Ride logging
+
+With a microSD card in J5, the firmware also **records every frame on the bus** as a
+PCAN `.trc` file — the same dialect the logger firmware writes, so captures drop straight
+into [`tools/trc_viz.html`](../../tools/trc_viz.html) and the rest of the offline tooling.
+One ride then gives you both the brake light's behaviour on IO18 and the trace that
+explains it, from the same image on the same board.
+
+Recording is **automatic and silent**, driven by the decoded `engine_cutoff` signal (CAN
+`0x121`: flag bit 30 **and** byte 6 == `0x28`; *RUN* is that predicate false):
+
+| Event | Effect |
+|-------|--------|
+| Kill switch seen in **RUN** with no capture in progress | open a **new** `N.trc` (`N` = highest on the card + 1) |
+| …which covers key-on with the switch already in RUN | first RUN seen after boot, or after the bus comes back |
+| …and every **CUTOFF → RUN** | each one is a new file |
+| Kill switch seen in **CUTOFF** | close the file |
+| `engine_cutoff` unseen for `CHMBL_TRC_LOG_CLOSE_MS` (3 s) | close the file — this is what key-off looks like |
+| Unseen for 1–3 s | **hold**: a short bus dropout keeps writing to the same file |
+
+Recording starts at **key-on**, not engine-start: with the switch in RUN the bus reports
+RUN as soon as it is powered, so cranking is captured too. A capture is never started
+from a stale (> 1 s) reading. The decision logic is a pure function
+([`log_gate.[ch]`](main/log_gate.h)), unit-tested on the host.
+
+**Durability.** The bike can drop 12 V at any moment with a file open, and nothing ends a
+capture cleanly. FAT only records a file's length at sync or close, so the file is
+`fflush`ed and **`fsync`ed every `CHMBL_TRC_LOG_SYNC_MS` (2 s)**: a power cut costs at
+most the last interval, rather than leaving a file that reads as empty. A cleanly closed
+file ends with two comment lines — `;dropped-frames: N …` (byte-identical to the
+logger's) and `;closed-by: <reason>`; a file without them was cut off by power loss.
+
+**No indicator.** IO18 is the brake light and has to mean exactly that, so recording
+shows nothing. **D6** lights only for a card **fault** — a card that is present but won't
+mount, or a file that can't be created or written. A *missing* card is not a fault:
+production transmitters leave J5 unpopulated, and there logging is simply idle. Check
+`rec` on the console, or the boot log, to see what it is doing.
+
+**Costs.** The TWAI acceptance filter is opened to every ID (the profile filter rejects
+~7/8 of the ID space, so a capture behind it would be silently incomplete), the driver RX
+queue grows to 128, and logging takes ~24 KB for its frame queue plus a 32 KB write
+buffer while a file is open. Set `CHMBL_TRC_LOG=n` (*Transmitter configuration → Ride
+logging*) to remove it all.
 
 ## Silent mode is enforced in hardware
 
@@ -57,7 +104,7 @@ on the other. Identical treatment to the logger firmware on this board.
 |-----|:----:|-------|
 | External indicator (J4 pin2, the pod LED) | **IO18** | **the brake light** — on = BRAKING or STOPPED |
 | **D5** green (onboard) | **IO2** | bus liveness: heartbeat → no CAN traffic · **inverted** heartbeat → traffic present |
-| **D6** red (onboard) | **IO1** | fault lamp: **2 Hz, 50% duty** if the silent pin reads low or TWAI fails to start; dark otherwise |
+| **D6** red (onboard) | **IO1** | fault lamp: **2 Hz, 50% duty** if the silent pin reads low, TWAI fails to start, or a microSD card is present but unusable; dark otherwise |
 
 "Heartbeat" is a double thump (lub-dub) on a 2 s period; **inverted heartbeat** is that
 waveform negated — mostly lit, two brief dropouts. Timings match the logger's indicator,
@@ -78,10 +125,14 @@ are stale.
 | Brake-light output | **IO18** | Q1 gate via `R3`, low-side to J4 pin2 |
 | Status LED D5 (green) | **IO2** | via `R20`, active-high |
 | Status LED D6 (red) | **IO1** | via `R21`, active-high |
+| SD CLK / CMD | **IO9** / **IO10** | J5, ride logging only; `R9` pull-up on CMD |
+| SD DAT0–DAT3 | **IO48** / **IO17** / **IO12** / **IO11** | J5, 4-bit; `R7`–`R11` pull-ups |
+| SD card-detect (DET_A) | **IO8** | J5 pin10, active-low; `R17` pull-up |
 
-All of these are configurable in `menuconfig` (*Transmitter configuration*). The logger's
-microSD pins (IO8–IO12, IO17, IO48) and its start/stop button (IO6) are **untouched** by
-this firmware — the transmitter populates neither.
+All of these are configurable in `menuconfig` (*Transmitter configuration*, with the SD
+pins under *Ride logging*). The microSD pins are used only by [ride logging](#ride-logging)
+and are left alone with `CHMBL_TRC_LOG=n`. The logger's start/stop button (IO6) is
+**untouched** by this firmware.
 
 > The DE-09 tunables are deliberately **not** Kconfig options: they are floats that get
 > swept, not build-time choices. They default to the calibrated values in
@@ -96,7 +147,7 @@ software/
 ├── sdkconfig.defaults      committed defaults (generated sdkconfig is gitignored)
 ├── main/
 │   ├── CMakeLists.txt
-│   ├── Kconfig.projbuild    pin map, CLI toggle, ESP-NOW channel/rate
+│   ├── Kconfig.projbuild    pin map, CLI toggle, ESP-NOW channel/rate, ride logging
 │   ├── main.c               app_main: indicators, link, CAN, FSM, console
 │   ├── bike_profile*.[ch]   generated CAN profile data (tools/gen_profile.py)
 │   ├── can_decode.[ch]      pure decode + derived acceleration (host-testable)
@@ -104,14 +155,17 @@ software/
 │   ├── brake_fsm.[ch]       DE-09 state machine — pure, host-testable
 │   ├── brake_ctl.[ch]       50 Hz tick, brake-light output, force override, tunables
 │   ├── status_led.[ch]      the three LEDs
+│   ├── log_gate.[ch]        ride-logging gate on the kill switch — pure, host-testable
+│   ├── trc_log.[ch]         microSD, .trc writer, card detect, periodic sync
+│   ├── trc_format.[ch]      PCAN .trc 2.1 formatting (copy of the logger's; keep in sync)
 │   ├── pairing.[ch], net.[ch]   ESP-NOW peer + heartbeat (DE-01)
 │   ├── console.c            REPL bootstrap (native USB Serial/JTAG)
 │   └── cmd_*.c              one file per console command
 └── test_host/              host harnesses for the pure cores (no ESP-IDF)
 ```
 
-`can_decode.c`, `brake_fsm.c` and the profile data are deliberately
-platform-independent (no IDF headers) so they can be host-tested, per
+`can_decode.c`, `brake_fsm.c`, `log_gate.c`, `trc_format.c` and the profile data are
+deliberately platform-independent (no IDF headers) so they can be host-tested, per
 [`docs/firmware.md §4`](../../docs/firmware.md#4-build--toolchain).
 
 ## Console
@@ -129,6 +183,7 @@ so that is the only console it has. Type `help` at the `chmbl>` prompt.
 | `sig show \| set \| ramp \| source` | Inspect or fake decoded signals — `sig source fake` then `sig ramp wheel -12` drives a synthetic stop straight through the real FSM. |
 | `can show \| can replay decel` | CAN RX diagnostics; replay a synthetic vector through an offline decoder. |
 | `pair …`, `net …` | ESP-NOW peer and heartbeat (DE-01). |
+| `rec` | Ride logging: card, kill-switch session, open file, frames written / dropped. |
 
 Bench recipe for the light, no bus required:
 
@@ -138,6 +193,19 @@ sig set gear 3
 sig set clutch 0
 sig ramp wheel -12 until 0     # a firm stop: light comes on, stays on through the stop
 state show
+```
+
+Bench recipe for ride logging, card in J5. The gate reads the same source-aware signals
+as the FSM, so faking the switch drives it; the frames recorded are still the live bus:
+
+```
+sig source fake
+sig set engine_cutoff 0        # RUN       -> rec: new N.trc RECORDING
+sig set engine_cutoff 1        # CUTOFF    -> closed
+sig set engine_cutoff 0        # RUN again -> a NEW file, N+1
+sig set engine_cutoff na       # signal gone -> closed at once (on a real bus,
+                               # going quiet closes after CHMBL_TRC_LOG_CLOSE_MS)
+rec
 ```
 
 ## Build
@@ -161,7 +229,7 @@ idf.py flash monitor   # console rides native USB — no UART bridge on this boa
 
 ## Host tests
 
-`test_host/` builds two harnesses against the same sources the firmware compiles, with
+`test_host/` builds three harnesses against the same sources the firmware compiles, with
 no ESP-IDF involved:
 
 ```bash
@@ -171,7 +239,13 @@ pip install -r tools/requirements.txt
 
 python3 tools/golden_check.py    # DE-08: C decoder vs python-cantools
 python3 tools/fsm_check.py       # DE-09: C state machine vs the reference
+./transmitter/software/test_host/build/log_gate_test   # ride-logging gate
 ```
+
+`log_gate_test` is self-checking: each case is a sequence of `engine_cutoff`
+observations and the open/close event the gate must produce — key-on in RUN, key-on in
+CUTOFF, repeated CUTOFF→RUN, a dropout inside the hold window, key-off silence, and the
+stale/close boundaries.
 
 `fsm_check.py` replays a ride capture through the firmware's FSM and through
 [`tools/trc_viz.py`](../../tools/trc_viz.py) — the Python twin of the in-browser bench
@@ -183,7 +257,7 @@ its behaviour) and this fails. Both run in CI on every push.
 
 [`.github/workflows/firmware-build.yml`](../../.github/workflows/firmware-build.yml)
 builds this project with the real ESP-IDF toolchain (`espressif/esp-idf-ci-action`,
-target `esp32s3`) on every push/PR that touches the firmware, and runs both host tests
+target `esp32s3`) on every push/PR that touches the firmware, and runs the host tests
 above.
 
 _Raw CAN capture logs go under `captures/`._

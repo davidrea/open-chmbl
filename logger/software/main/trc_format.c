@@ -1,3 +1,8 @@
+/*
+ * transmitter/software/main/trc_format.c is a copy of this file (differing
+ * only in the generator banner) so both firmwares write the same .trc
+ * dialect. Change one, change both.
+ */
 #include "trc_format.h"
 
 #include <stdio.h>

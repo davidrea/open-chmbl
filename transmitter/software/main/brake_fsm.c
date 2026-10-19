@@ -15,6 +15,7 @@ static void rearm(brake_fsm_t *f)
 {
     f->since_ms = SINCE_REARMED;
     f->decel_hold_ms = 0;
+    f->eased_hold_ms = 0;
     f->steady_hold_ms = 0;
     f->stopped_hold_ms = 0;
 }
@@ -51,6 +52,9 @@ brake_fsm_state_t brake_fsm_step(brake_fsm_t *f, const brake_fsm_in_t *in,
      * hold completes (matches the reference implementation). */
     f->decel_hold_ms = (acv && ac < -u->decel_on_mphps)
                            ? f->decel_hold_ms + dt_ms : 0;
+    f->eased_hold_ms = (f->state == BRAKE_FSM_BRAKING && acv &&
+                        ac > -u->decel_off_mphps)
+                           ? f->eased_hold_ms + dt_ms : 0;
     f->steady_hold_ms = (f->state == BRAKE_FSM_BRAKING && acv &&
                          fabsf(ac) < u->steady_band_mphps)
                             ? f->steady_hold_ms + dt_ms : 0;
@@ -85,6 +89,9 @@ brake_fsm_state_t brake_fsm_step(brake_fsm_t *f, const brake_fsm_in_t *in,
             } else if (acv && ac > u->accel_off_mphps &&
                        sp > u->accel_off_min_speed_mph) {
                 next = BRAKE_FSM_OFF;           /* rule 4 — accelerating away */
+            } else if (f->eased_hold_ms >= u->decel_off_hold_ms &&
+                       sp > u->accel_off_min_speed_mph) {
+                next = BRAKE_FSM_OFF;           /* rule 4b — braking eased off */
             } else if (f->steady_hold_ms >= u->steady_timeout_ms) {
                 next = BRAKE_FSM_OFF;           /* rule 5 — steady cruise  */
             }
@@ -107,6 +114,7 @@ brake_fsm_state_t brake_fsm_step(brake_fsm_t *f, const brake_fsm_in_t *in,
         f->transitions++;
         f->since_ms = 0;
         f->decel_hold_ms = 0;
+        f->eased_hold_ms = 0;
         f->steady_hold_ms = 0;
         f->stopped_hold_ms = 0;
     } else if (f->since_ms <= SINCE_REARMED - dt_ms) {
@@ -149,6 +157,8 @@ static const tune_field_t s_fields[] = {
     TUNE(moving_speed_mph,        TUNE_F32,    0.5f,     10.0f),
     TUNE(accel_off_mphps,         TUNE_F32,    0.1f,      5.0f),
     TUNE(accel_off_min_speed_mph, TUNE_F32,    0.0f,     15.0f),
+    TUNE(decel_off_mphps,         TUNE_F32,    0.0f,      8.0f),
+    TUNE(decel_off_hold_ms,       TUNE_U16,   20.0f,   5000.0f),
     TUNE(steady_band_mphps,       TUNE_F32,    0.1f,      3.0f),
     TUNE(steady_timeout_ms,       TUNE_U16,  100.0f,   5000.0f),
     TUNE(stop_timeout_ms,         TUNE_U32, 1000.0f, 120000.0f),

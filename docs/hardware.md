@@ -14,7 +14,11 @@ Lives at the diagnostic port. Powered from the bike. Read-only on CAN.
 (ESP32-S3-WROOM-1 + onboard CAN transceiver + protected 12 V/USB-C power, see
 [`logger/hardware/README.md`](../logger/hardware/README.md)) was designed to double
 as the transmitter with its microSD slot (J5) and button/LED breakout (J4) left
-unpopulated — the transmitter needs neither. This supersedes the earlier
+unpopulated — the production transmitter needs neither. (The ride-validation board
+populates both: J4's LED stands in for the brake light, and with a card in J5 the
+transmitter firmware records the bus while the kill switch is in RUN — see
+[`transmitter/software/README.md`](../transmitter/software/README.md#ride-logging).)
+This supersedes the earlier
 ESP32-C3 + SN65HVD230 sketch below the block diagram; the C3 remains the MCU for
 `brake_light/` (§2), which has no SD card and so doesn't need the S3's SDMMC
 peripheral.

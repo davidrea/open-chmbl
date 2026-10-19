@@ -31,6 +31,7 @@ void cmd_pair_register(void);     /* `pair`  — manage the ESP-NOW peer */
 void cmd_net_register(void);      /* `net`   — ESP-NOW heartbeat control/diagnostics */
 void cmd_can_register(void);      /* `can`   — CAN RX diagnostics + bench replay */
 void cmd_sig_register(void);      /* `sig`   — decoded-signal show/fake/ramp/source */
+void cmd_rec_register(void);      /* `rec`   — ride-logging (microSD) status */
 
 #ifdef __cplusplus
 }

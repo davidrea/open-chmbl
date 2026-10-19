@@ -48,6 +48,7 @@ typedef struct {
     /* FSM timers, in ms (since_ms saturates while the machine is rearmed) */
     uint32_t since_ms;
     uint32_t decel_hold_ms;
+    uint32_t eased_hold_ms;
     uint32_t steady_hold_ms;
     uint32_t stopped_hold_ms;
     uint32_t transitions;

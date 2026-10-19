@@ -85,12 +85,14 @@ class BrakeTunables:
     it leaves open (decel_on, accel_off, steady_band, steady_timeout) and the
     anti-strobe dwell get sensible defaults, all overridable via the UI/CLI."""
 
-    decel_on_mphps: float = 2.0        # rule 1 trigger (open — default)
-    decel_on_debounce_ms: float = 120.0  # doc: the knee
+    decel_on_mphps: float = 2.5        # rule 1 trigger (retuned on-road)
+    decel_on_debounce_ms: float = 160.0  # rule 1 debounce (retuned on-road)
     stop_speed_mph: float = 1.0        # doc: STOPPED entry / rolling qualifier
     moving_speed_mph: float = 3.0      # doc: STOPPED->OFF hysteresis
     accel_off_mphps: float = 0.5       # rule 4 (open — default)
-    accel_off_min_speed_mph: float = 5.0   # doc: rule 4 "speed > 5"
+    accel_off_min_speed_mph: float = 5.0   # doc: rules 4/4b "speed > 5"
+    decel_off_mphps: float = 1.0       # rule 4b: decel eased under this
+    decel_off_hold_ms: float = 400.0   # rule 4b: ...held this long
     steady_band_mphps: float = 0.75    # rule 5 (open — default)
     steady_timeout_ms: float = 1500.0  # rule 5 (open — default)
     stop_timeout_ms: float = 60000.0   # doc: "the 60 s timeout fires"
@@ -296,6 +298,7 @@ def run_fsm(log: DecodedLog, tun: BrakeTunables,
     s = OFF
     since_trans = 1e12       # allow the first transition immediately
     decel_hold = 0.0
+    eased_hold = 0.0
     steady_hold = 0.0
     stopped_hold = 0.0
     dt = FSM_DT_MS
@@ -310,6 +313,9 @@ def run_fsm(log: DecodedLog, tun: BrakeTunables,
         # condition timers (accumulate before evaluating guards)
         decel_active = ac_valid and ac < -tun.decel_on_mphps
         decel_hold = decel_hold + dt if decel_active else 0.0
+        eased_active = (s == BRAKING and ac_valid and
+                        ac > -tun.decel_off_mphps)
+        eased_hold = eased_hold + dt if eased_active else 0.0
         steady_active = (s == BRAKING and ac_valid and
                          abs(ac) < tun.steady_band_mphps)
         steady_hold = steady_hold + dt if steady_active else 0.0
@@ -328,6 +334,9 @@ def run_fsm(log: DecodedLog, tun: BrakeTunables,
                 elif (ac_valid and ac > tun.accel_off_mphps and
                       sp > tun.accel_off_min_speed_mph):
                     new_s = OFF                                      # rule 4
+                elif (eased_hold >= tun.decel_off_hold_ms and
+                      sp > tun.accel_off_min_speed_mph):
+                    new_s = OFF                                      # rule 4b
                 elif steady_hold >= tun.steady_timeout_ms:
                     new_s = OFF                                      # rule 5
             else:  # STOPPED
@@ -342,6 +351,7 @@ def run_fsm(log: DecodedLog, tun: BrakeTunables,
             s = new_s
             since_trans = 0.0
             decel_hold = 0.0
+            eased_hold = 0.0
             steady_hold = 0.0
             stopped_hold = 0.0
         else:
@@ -627,6 +637,8 @@ def run_gui(log: DecodedLog, tun: BrakeTunables, selftest: int = 0,
                 ("decel_on_debounce_ms", 0.0, 500.0),
                 ("accel_off_mphps", 0.1, 5.0),
                 ("accel_off_min_speed_mph", 0.0, 15.0),
+                ("decel_off_mphps", 0.0, 8.0),
+                ("decel_off_hold_ms", 20.0, 5000.0),
                 ("steady_band_mphps", 0.1, 3.0),
                 ("steady_timeout_ms", 200.0, 5000.0),
                 ("moving_speed_mph", 1.0, 10.0),

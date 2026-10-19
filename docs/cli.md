@@ -88,6 +88,7 @@ Realizes [TX-CLI-1…5](feature-functions.md#tx-cli--developer-cli).
 | `net show` | ESP-NOW peer, seq, TX rate, send success/fail. | TX-CLI-4 |
 | `net rate <hz>` | Set heartbeat rate (dev). | TX-CLI-5 |
 | `net send` | Force one heartbeat now. | TX-CLI-4 |
+| `rec` | Ride logging (microSD): card, kill-switch session, open file, frames written/dropped. Read-only — recording is automatic; drive it on the bench with `sig set engine_cutoff 0\|1\|na`. | — |
 | `power show` | Sleep/wake state, parked-draw mode. | — |
 
 ## 4. Brake_light CLI

@@ -37,6 +37,7 @@
 static volatile bool s_brake;
 static volatile bool s_can_act;
 static volatile bool s_fault;
+static volatile bool s_log_fault;  /* the ride logger's, kept apart from s_fault */
 
 static inline void led_write(gpio_num_t gpio, bool on)
 {
@@ -83,7 +84,7 @@ static void status_led_task(void *arg)
          * "silent-pin fault" remain distinguishable without the console. */
         led_write(LED_GREEN_GPIO, (can_hold > 0) ? !hb : hb);
 
-        led_write(LED_RED_GPIO, s_fault && fault_blink(phase));
+        led_write(LED_RED_GPIO, (s_fault || s_log_fault) && fault_blink(phase));
 
         vTaskDelay(pdMS_TO_TICKS(LED_TICK_MS));
         phase += LED_TICK_MS;
@@ -126,4 +127,9 @@ void status_led_can_activity(void)
 void status_led_fault(bool on)
 {
     s_fault = on;
+}
+
+void status_led_log_fault(bool on)
+{
+    s_log_fault = on;
 }

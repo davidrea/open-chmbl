@@ -53,9 +53,9 @@ static int state_do_show(void)
     if (st.gear_valid && st.gear != 0) {
         printf("          gear %u\n", st.gear);
     }
-    printf("timers:   decel %lu ms, steady %lu ms, stopped %lu ms\n",
-           (unsigned long)st.decel_hold_ms, (unsigned long)st.steady_hold_ms,
-           (unsigned long)st.stopped_hold_ms);
+    printf("timers:   decel %lu ms, eased %lu ms, steady %lu ms, stopped %lu ms\n",
+           (unsigned long)st.decel_hold_ms, (unsigned long)st.eased_hold_ms,
+           (unsigned long)st.steady_hold_ms, (unsigned long)st.stopped_hold_ms);
     if (st.since_ms == UINT32_MAX) {
         printf("          since last transition: rearmed (no valid speed yet)\n");
     } else {

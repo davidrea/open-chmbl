@@ -78,6 +78,7 @@ static void brake_tick_task(void *arg)
         s_status.gear_valid      = can_sig_valid(&sigs.gear, now);
         s_status.since_ms        = s_fsm.since_ms;
         s_status.decel_hold_ms   = s_fsm.decel_hold_ms;
+        s_status.eased_hold_ms   = s_fsm.eased_hold_ms;
         s_status.steady_hold_ms  = s_fsm.steady_hold_ms;
         s_status.stopped_hold_ms = s_fsm.stopped_hold_ms;
         s_status.transitions     = s_fsm.transitions;
